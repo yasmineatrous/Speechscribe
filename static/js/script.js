@@ -343,31 +343,70 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Download PDF function
+    // Download PDF function
     function downloadPDF() {
-        const notes = structuredNotesElement.innerHTML;
+        const notes = structuredNotesElement.textContent || structuredNotesElement.innerText;
         
         if (!notes) {
             showError('Please generate notes before downloading PDF.');
             return;
         }
         
-        // Create a form and submit it to trigger PDF download
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '/download-pdf';
+        // Show loading indicator
+        const downloadingAlert = document.createElement('div');
+        downloadingAlert.className = "alert alert-info mb-3";
+        downloadingAlert.innerHTML = '<i class="bi bi-cloud-download me-2"></i> Preparing your PDF file...';
+        structuredNotesElement.parentNode.insertBefore(downloadingAlert, structuredNotesElement);
         
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'notes_html';
-        input.value = notes;
-        
-        form.appendChild(input);
-        document.body.appendChild(form);
-        form.submit();
-        document.body.removeChild(form);
+        // Use fetch API to get the PDF blob
+        fetch('/download-pdf', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            // Create a URL for the blob
+            const url = window.URL.createObjectURL(blob);
+            
+            // Create a link element
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = 'structured_notes.pdf';
+            
+            // Append to the body and trigger download
+            document.body.appendChild(a);
+            a.click();
+            
+            // Clean up
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            downloadingAlert.remove();
+            
+            // Show success notification
+            const successAlert = document.createElement('div');
+            successAlert.className = "alert alert-success mb-3";
+            successAlert.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> PDF downloaded successfully!';
+            structuredNotesElement.parentNode.insertBefore(successAlert, structuredNotesElement);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                successAlert.remove();
+            }, 3000);
+        })
+        .catch(error => {
+            downloadingAlert.remove();
+            console.error('Error downloading PDF:', error);
+            showError(`Error downloading PDF: ${error.message}`);
+        });
     }
-    
-    // Function to use manual transcript
     function useManualTranscript() {
         const transcript = manualTranscriptInput.value.trim();
         
