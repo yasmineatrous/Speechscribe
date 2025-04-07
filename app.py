@@ -292,11 +292,17 @@ def save_transcript():
 def transcribe_audio_file():
     """Process and transcribe an uploaded audio file (MP3, WAV, etc.)"""
     try:
+        # Log request data for debugging
+        logger.info(f"Request files: {list(request.files.keys())}")
+        logger.info(f"Request Content-Type: {request.content_type}")
+        
         # Check if file was uploaded
         if 'audio_file' not in request.files:
-            return jsonify({'error': 'No audio file provided'}), 400
+            logger.error("No 'audio_file' in request.files")
+            return jsonify({'error': 'No audio file provided. Make sure the file is named "audio_file" in the request.'}), 400
         
         audio_file = request.files['audio_file']
+        logger.info(f"Received file: {audio_file.filename}, size: {audio_file.content_length if hasattr(audio_file, 'content_length') else 'unknown'}")
         
         # Check if file was selected
         if audio_file.filename == '':
@@ -305,14 +311,21 @@ def transcribe_audio_file():
         # Check file extension
         allowed_extensions = {'.mp3', '.wav', '.m4a', '.ogg', '.flac'}
         file_ext = os.path.splitext(audio_file.filename)[1].lower()
+        logger.info(f"File extension: {file_ext}")
         
         if file_ext not in allowed_extensions:
             return jsonify({
                 'error': f'Unsupported file format. Allowed formats: {", ".join(allowed_extensions)}'
             }), 400
         
+        # Make sure uploads directory exists
+        uploads_dir = os.path.join(os.getcwd(), 'uploads')
+        os.makedirs(uploads_dir, exist_ok=True)
+        
         # Process and transcribe the audio file
+        logger.info("Starting audio transcription process...")
         transcript = process_uploaded_audio(audio_file)
+        logger.info(f"Transcription complete: {transcript[:50]}...")
         
         # Check if there was an error
         if transcript.startswith('Error'):
@@ -326,6 +339,8 @@ def transcribe_audio_file():
     
     except Exception as e:
         logger.error(f"Error processing audio file: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())  # Log full traceback
         return jsonify({'error': f"Failed to process audio file: {str(e)}"}), 500
 
 @app.route('/transcribe-youtube', methods=['POST'])

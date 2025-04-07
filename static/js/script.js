@@ -1,26 +1,25 @@
-// Main JavaScript for the Speech to Structured Notes application
-
-document.addEventListener('DOMContentLoaded', () => {
-    // DOM Elements
+document.addEventListener('DOMContentLoaded', function() {
+    // UI elements
     const startRecordingBtn = document.getElementById('startRecording');
     const stopRecordingBtn = document.getElementById('stopRecording');
     const clearTranscriptBtn = document.getElementById('clearTranscript');
+    const transcriptElement = document.getElementById('transcript');
     const generateNotesBtn = document.getElementById('generateNotes');
     const downloadPDFBtn = document.getElementById('downloadPDF');
-    const transcriptElement = document.getElementById('transcript');
     const structuredNotesElement = document.getElementById('structured-notes');
+    const notesLoadingElement = document.getElementById('notes-loading');
     const recordingStatus = document.getElementById('status-text');
     const recordingIndicator = document.getElementById('recording-indicator');
-    const notesLoading = document.getElementById('notes-loading');
-    const youtubeUrlInput = document.getElementById('youtube-url');
     const transcribeYoutubeBtn = document.getElementById('transcribe-youtube');
-    const manualTranscriptInput = document.getElementById('manual-transcript');
+    const youtubeUrlInput = document.getElementById('youtube-url');
     const useManualTranscriptBtn = document.getElementById('use-manual-transcript');
+    const manualTranscriptInput = document.getElementById('manual-transcript');
     
     // File upload functionality
     const audioFileInput = document.getElementById('audio-file');
     const transcribeAudioFileBtn = document.getElementById('transcribe-audio-file');
     const uploadProgress = document.getElementById('upload-progress');
+    const audioUploadForm = document.getElementById('audio-upload-form');
     
     // Global variables
     let recognition = null;
@@ -28,156 +27,200 @@ document.addEventListener('DOMContentLoaded', () => {
     let interimTranscript = '';
     let isRecording = false;
     
-    // Error handling function
+    // Check browser support for Speech Recognition
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    // Show error modal
     function showError(message) {
-        const errorMessage = document.getElementById('error-message');
-        errorMessage.textContent = message;
-        
-        // Show the modal
         const errorModal = new bootstrap.Modal(document.getElementById('errorModal'));
+        document.getElementById('error-message').textContent = message;
         errorModal.show();
     }
     
-    // Check if the browser supports speech recognition
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-        if (startRecordingBtn) {
-            startRecordingBtn.disabled = true;
-        }
-        showError('Your browser does not support speech recognition. Please use Chrome or Edge.');
-    } else {
-        // Initialize speech recognition
-        recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = 'en-US';
-        
-        // Speech recognition events
-        recognition.onstart = function() {
-            isRecording = true;
-            recordingStatus.textContent = 'Recording...';
-            recordingIndicator.textContent = '🔴';
-            recordingIndicator.style.color = 'red';
+    // Initialize speech recognition if supported
+    function initializeSpeechRecognition() {
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
             
-            // Toggle buttons
-            if (startRecordingBtn) startRecordingBtn.disabled = true;
-            if (stopRecordingBtn) stopRecordingBtn.disabled = false;
-            if (clearTranscriptBtn) clearTranscriptBtn.disabled = true;
-        };
-        
-        recognition.onend = function() {
-            isRecording = false;
-            recordingStatus.textContent = 'Ready';
-            recordingIndicator.textContent = '⚪';
-            recordingIndicator.style.color = '';
+            recognition.onstart = function() {
+                isRecording = true;
+                recordingStatus.textContent = 'Recording...';
+                recordingIndicator.textContent = '🔴';
+                startRecordingBtn.disabled = true;
+                stopRecordingBtn.disabled = false;
+                if (generateNotesBtn) generateNotesBtn.disabled = true;
+                if (downloadPDFBtn) downloadPDFBtn.disabled = true;
+            };
             
-            // Toggle buttons
-            if (startRecordingBtn) startRecordingBtn.disabled = false;
-            if (stopRecordingBtn) stopRecordingBtn.disabled = true;
-            if (clearTranscriptBtn) clearTranscriptBtn.disabled = false;
-        };
-        
-        recognition.onresult = function(event) {
-            interimTranscript = '';
-            
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) {
-                    finalTranscript += event.results[i][0].transcript + ' ';
-                } else {
-                    interimTranscript += event.results[i][0].transcript;
+            recognition.onresult = function(event) {
+                interimTranscript = '';
+                
+                // Collect the results
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript + ' ';
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
                 }
-            }
+                
+                // Update transcript display
+                updateTranscriptDisplay();
+            };
             
-            updateTranscriptDisplay();
-        };
-        
-        recognition.onerror = function(event) {
-            console.error('Speech recognition error', event.error);
+            recognition.onerror = function(event) {
+                console.error('Speech recognition error:', event.error);
+                
+                let errorMessage = 'Speech recognition error';
+                
+                switch(event.error) {
+                    case 'not-allowed':
+                        errorMessage = 'Microphone access was denied. Please allow microphone access to use this feature.';
+                        break;
+                    case 'no-speech':
+                        errorMessage = 'No speech was detected. Please try again.';
+                        break;
+                    case 'network':
+                        errorMessage = 'Network error occurred. Please check your internet connection.';
+                        break;
+                    default:
+                        errorMessage = `Speech recognition error: ${event.error}`;
+                }
+                
+                showError(errorMessage);
+                stopRecording();
+            };
             
-            if (event.error === 'no-speech') {
-                recordingStatus.textContent = 'No speech detected';
-            } else {
-                showError(`Speech recognition error: ${event.error}`);
-            }
+            recognition.onend = function() {
+                if (isRecording) {
+                    // If we're still supposed to be recording, restart it
+                    // (this handles the automatic stop after ~60 seconds)
+                    recognition.start();
+                }
+            };
             
-            // Stop recording on error
-            if (recognition) {
-                recognition.stop();
-            }
-        };
-    }
-    
-    // Start recording function
-    function startRecording() {
-        finalTranscript = '';
-        interimTranscript = '';
-        updateTranscriptDisplay();
-        
-        if (recognition) {
-            try {
-                recognition.start();
-            } catch (e) {
-                console.error('Error starting recognition:', e);
-                showError(`Could not start recording: ${e.message}`);
-            }
+            return true;
+        } else {
+            if (startRecordingBtn) startRecordingBtn.disabled = true;
+            if (stopRecordingBtn) stopRecordingBtn.disabled = true;
+            return false;
         }
     }
     
-    // Stop recording function
-    function stopRecording() {
-        if (recognition) {
-            recognition.stop();
+    // Initialize speech recognition
+    const speechRecognitionSupported = initializeSpeechRecognition();
+    
+    // If speech recognition isn't supported, show a warning
+    if (!speechRecognitionSupported && document.getElementById('recording-tab')) {
+        document.getElementById('recording-tab').classList.add('disabled');
+        document.getElementById('recording-tab').setAttribute('data-bs-toggle', '');
+        
+        // Add warning to the recording content tab
+        const recordingContent = document.getElementById('recording-content');
+        if (recordingContent) {
+            const warningDiv = document.createElement('div');
+            warningDiv.className = 'alert alert-warning';
+            warningDiv.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>Speech recognition is not supported in this browser. Please try using Chrome or Edge.';
+            recordingContent.prepend(warningDiv);
+        }
+    }
+    
+    // Update transcript display with current transcription
+    function updateTranscriptDisplay() {
+        if (transcriptElement) {
+            transcriptElement.innerHTML = finalTranscript + 
+                '<span class="text-muted">' + interimTranscript + '</span>';
             
             // If we have a final transcript, enable the generate notes button
-            if (finalTranscript.trim()) {
-                if (generateNotesBtn) {
-                    generateNotesBtn.disabled = false;
-                }
+            if (finalTranscript.trim() !== '') {
+                if (generateNotesBtn) generateNotesBtn.disabled = false;
+            }
+            
+            // Save current transcript to the server periodically if it changes
+            if (finalTranscript.trim() !== '') {
+                saveTranscriptToServer(finalTranscript);
             }
         }
     }
     
-    // Update transcript display
-    function updateTranscriptDisplay() {
-        transcriptElement.innerHTML = finalTranscript + '<span style="color: #aaa">' + interimTranscript + '</span>';
-        
-        // Save transcript to server
-        if (finalTranscript.trim()) {
-            saveTranscriptToServer(finalTranscript.trim());
-        }
-    }
-    
-    // Save transcript to server
+    // Function to save transcript to server
     function saveTranscriptToServer(transcript) {
         fetch('/save-transcript', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ transcript: transcript }),
+            body: JSON.stringify({ transcript: transcript })
         })
-        .then(response => response.json())
-        .then(data => {
-            if (data.error) {
-                console.error('Error saving transcript:', data.error);
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to save transcript');
             }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Transcript saved successfully');
         })
         .catch(error => {
             console.error('Error saving transcript:', error);
         });
     }
     
-    // Render markdown
-    function renderMarkdown(markdownText) {
-        // Use the marked library to convert markdown to HTML
-        const rawHTML = marked.parse(markdownText);
-        
-        // Sanitize the HTML to prevent XSS
-        const sanitizedHTML = DOMPurify.sanitize(rawHTML);
-        
-        return sanitizedHTML;
+    // Start recording
+    function startRecording() {
+        if (recognition) {
+            // Clear previous transcript if any
+            if (transcriptElement && transcriptElement.textContent.trim() === 'Your transcript will appear here...') {
+                finalTranscript = '';
+                interimTranscript = '';
+                transcriptElement.textContent = '';
+            }
+            
+            try {
+                recognition.start();
+            } catch (error) {
+                console.error('Error starting recognition:', error);
+                showError('Error starting speech recognition. Please try again.');
+            }
+        } else {
+            showError('Speech recognition is not supported in your browser. Please try Chrome or Edge.');
+        }
     }
     
-    // Get YouTube transcript
+    // Stop recording
+    function stopRecording() {
+        if (recognition) {
+            isRecording = false;
+            recognition.stop();
+            recordingStatus.textContent = 'Ready';
+            recordingIndicator.textContent = '⚪';
+            startRecordingBtn.disabled = false;
+            stopRecordingBtn.disabled = true;
+            
+            // Enable generate notes button if we have a transcript
+            if (finalTranscript.trim() !== '') {
+                if (generateNotesBtn) generateNotesBtn.disabled = false;
+            }
+        }
+    }
+    
+    // Function to clear transcript
+    function clearTranscript() {
+        finalTranscript = '';
+        interimTranscript = '';
+        if (transcriptElement) transcriptElement.textContent = 'Your transcript will appear here...';
+        if (generateNotesBtn) generateNotesBtn.disabled = true;
+        if (downloadPDFBtn) downloadPDFBtn.disabled = true;
+        if (structuredNotesElement) structuredNotesElement.textContent = 'Generated notes will appear here...';
+        
+        // Save empty transcript to server to clear it
+        saveTranscriptToServer('');
+    }
+    
+    // Fetch YouTube transcript
     function getYoutubeTranscript() {
         const youtubeUrl = youtubeUrlInput.value.trim();
         
@@ -186,194 +229,262 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        // Show loading state
+        if (!youtubeUrl.match(/^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)/)) {
+            showError('Please enter a valid YouTube URL (must be youtube.com or youtu.be link).');
+            return;
+        }
+        
+        // Disable button and show loading
         transcribeYoutubeBtn.disabled = true;
         transcribeYoutubeBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Processing...';
         
-        // Show intermediate message in transcript area
-        transcriptElement.innerHTML = '<div class="text-center my-4"><div class="spinner-border text-primary" role="status"></div><p class="mt-2">Fetching transcript from YouTube...<br>This may take a moment for longer videos.</p></div>';
-        
-        // Call the API
         fetch('/transcribe-youtube', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ youtube_url: youtubeUrl }),
+            body: JSON.stringify({ youtube_url: youtubeUrl })
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => {
+                    throw new Error(data.error || 'Failed to get transcript from YouTube video');
+                });
+            }
+            return response.json();
+        })
         .then(data => {
-            if (data.error) {
-                showError(data.error);
-                transcriptElement.textContent = 'Error fetching transcript. Please try again.';
-            } else {
-                // Update the transcript
+            if (data.transcript) {
                 finalTranscript = data.transcript;
-                updateTranscriptDisplay();
+                
+                // Update transcript display
+                if (transcriptElement) {
+                    transcriptElement.textContent = finalTranscript;
+                }
                 
                 // Enable generate notes button
                 if (generateNotesBtn) {
                     generateNotesBtn.disabled = false;
                 }
+                
+                // Reset YouTube URL input
+                youtubeUrlInput.value = '';
             }
         })
         .catch(error => {
-            console.error('Error:', error);
-            showError(`Error fetching YouTube transcript: ${error.message}`);
-            transcriptElement.textContent = 'Error fetching transcript. Please try again.';
+            console.error('Error getting YouTube transcript:', error);
+            showError(error.message || 'Failed to get transcript from YouTube video. Please try a different video or method.');
         })
         .finally(() => {
-            // Reset button state
+            // Re-enable button and restore text
             transcribeYoutubeBtn.disabled = false;
             transcribeYoutubeBtn.innerHTML = '<i class="fas fa-download me-1"></i> Get YouTube Transcript';
         });
     }
     
-    // Generate notes function
+    // Use manual transcript
+    function useManualTranscript() {
+        const manualText = manualTranscriptInput.value.trim();
+        
+        if (!manualText) {
+            showError('Please enter or paste a transcript in the text area.');
+            return;
+        }
+        
+        finalTranscript = manualText;
+        
+        // Update transcript display
+        if (transcriptElement) {
+            transcriptElement.textContent = finalTranscript;
+        }
+        
+        // Enable generate notes button
+        if (generateNotesBtn) {
+            generateNotesBtn.disabled = false;
+        }
+        
+        // Save transcript to server
+        saveTranscriptToServer(finalTranscript);
+        
+        // Reset manual text input
+        manualTranscriptInput.value = '';
+    }
+    
+    // Generate structured notes
     function generateNotes() {
-        // Make sure we have a transcript
         if (!finalTranscript.trim()) {
-            showError('Please record or enter a transcript first.');
+            showError('No transcript available. Please record or enter some text first.');
             return;
         }
         
         // Show loading indicator
-        notesLoading.classList.remove('d-none');
-        generateNotesBtn.disabled = true;
+        if (notesLoadingElement) {
+            notesLoadingElement.classList.remove('d-none');
+        }
+        if (structuredNotesElement) {
+            structuredNotesElement.textContent = 'Generating...';
+        }
         
-        // Call the API to generate structured notes
+        // Disable generate button
+        if (generateNotesBtn) {
+            generateNotesBtn.disabled = true;
+            generateNotesBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Processing...';
+        }
+        
         fetch('/generate-notes', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ transcript: finalTranscript }),
+            body: JSON.stringify({ transcript: finalTranscript })
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => {
+                    throw new Error(data.error || 'Failed to generate notes');
+                });
+            }
+            return response.json();
+        })
         .then(data => {
-            if (data.error) {
-                showError(data.error);
-            } else {
-                // Update the notes display with markdown rendering
-                structuredNotesElement.innerHTML = renderMarkdown(data.notes);
+            if (data.notes) {
+                if (structuredNotesElement) {
+                    // Render markdown
+                    structuredNotesElement.innerHTML = renderMarkdown(data.notes);
+                }
                 
-                // Enable PDF download
+                // Enable download button
                 if (downloadPDFBtn) {
                     downloadPDFBtn.disabled = false;
                 }
             }
         })
         .catch(error => {
-            console.error('Error:', error);
-            showError(`Error generating notes: ${error.message}`);
+            console.error('Error generating notes:', error);
+            showError(error.message || 'Failed to generate structured notes. Please try again.');
+            
+            if (structuredNotesElement) {
+                structuredNotesElement.textContent = 'Error generating notes. Please try again.';
+            }
         })
         .finally(() => {
             // Hide loading indicator
-            notesLoading.classList.add('d-none');
-            generateNotesBtn.disabled = false;
+            if (notesLoadingElement) {
+                notesLoadingElement.classList.add('d-none');
+            }
+            
+            // Reset generate button
+            if (generateNotesBtn) {
+                generateNotesBtn.disabled = false;
+                generateNotesBtn.innerHTML = '<i class="fas fa-magic me-1"></i> Generate Notes';
+            }
         });
     }
     
-    // Clear transcript function
-    function clearTranscript() {
-        finalTranscript = '';
-        interimTranscript = '';
-        updateTranscriptDisplay();
+    // Simple markdown renderer for the UI
+    function renderMarkdown(markdownText) {
+        if (!markdownText) return '';
         
-        // Disable generate notes button
-        if (generateNotesBtn) {
-            generateNotesBtn.disabled = true;
+        // Handle headers
+        let html = markdownText
+            .replace(/^# (.*?)$/gm, '<h1>$1</h1>')
+            .replace(/^## (.*?)$/gm, '<h2>$1</h2>')
+            .replace(/^### (.*?)$/gm, '<h3>$1</h3>')
+            .replace(/^#### (.*?)$/gm, '<h4>$1</h4>')
+            .replace(/^##### (.*?)$/gm, '<h5>$1</h5>')
+            .replace(/^###### (.*?)$/gm, '<h6>$1</h6>');
+        
+        // Handle bold and italic
+        html = html
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/~~(.*?)~~/g, '<del>$1</del>');
+        
+        // Handle lists
+        html = html
+            .replace(/^- (.*?)$/gm, '<li>$1</li>')
+            .replace(/^(\d+)\. (.*?)$/gm, '<li>$2</li>');
+        
+        // Wrap lists in ul or ol tags
+        html = html
+            .replace(/(<li>.*?<\/li>)\n<li>/gs, '$1<li>')
+            .replace(/<li>.*?<\/li>/gs, function(match) {
+                return '<ul>' + match + '</ul>';
+            });
+        
+        // Handle code blocks
+        html = html
+            .replace(/```(.*?)```/gs, '<pre><code>$1</code></pre>')
+            .replace(/`(.*?)`/g, '<code>$1</code>');
+        
+        // Handle blockquotes
+        html = html.replace(/^> (.*?)$/gm, '<blockquote>$1</blockquote>');
+        
+        // Handle horizontal rules
+        html = html.replace(/^---$/gm, '<hr>');
+        
+        // Handle paragraphs (double newlines)
+        html = html.replace(/\n\n([^<].*?)\n\n/gs, '</p><p>$1</p><p>');
+        
+        // Convert line breaks to <br>
+        html = html.replace(/\n([^<])/g, '<br>$1');
+        
+        // Wrap in paragraph if not already
+        if (!html.startsWith('<')) {
+            html = '<p>' + html + '</p>';
         }
         
-        // Show placeholder text
-        transcriptElement.textContent = 'Your transcript will appear here...';
+        return html;
     }
     
-    // Download PDF function
+    // Download PDF of structured notes
     function downloadPDF() {
-        const notes = structuredNotesElement.textContent || structuredNotesElement.innerText;
-        
-        if (!notes) {
-            showError('Please generate notes before downloading PDF.');
+        if (!structuredNotesElement || structuredNotesElement.textContent === 'Generated notes will appear here...') {
+            showError('No structured notes to download. Please generate notes first.');
             return;
         }
         
-        // Show loading indicator
-        const downloadingAlert = document.createElement('div');
-        downloadingAlert.className = "alert alert-info mb-3";
-        downloadingAlert.innerHTML = '<i class="bi bi-cloud-download me-2"></i> Preparing your PDF file...';
-        structuredNotesElement.parentNode.insertBefore(downloadingAlert, structuredNotesElement);
+        // Show loading state
+        if (downloadPDFBtn) {
+            downloadPDFBtn.disabled = true;
+            downloadPDFBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Generating PDF...';
+        }
         
-        // Use fetch API to get the PDF blob
+        // Fetch the PDF using AJAX
         fetch('/download-pdf', {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-            }
+            method: 'POST'
         })
         .then(response => {
             if (!response.ok) {
-                throw new Error('Network response was not ok');
+                throw new Error('Failed to generate PDF');
             }
             return response.blob();
         })
         .then(blob => {
-            // Create a URL for the blob
+            // Create a download link for the blob
             const url = window.URL.createObjectURL(blob);
-            
-            // Create a link element
             const a = document.createElement('a');
-            a.style.display = 'none';
             a.href = url;
             a.download = 'structured_notes.pdf';
-            
-            // Append to the body and trigger download
             document.body.appendChild(a);
             a.click();
-            
-            // Clean up
             window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-            downloadingAlert.remove();
-            
-            // Show success notification
-            const successAlert = document.createElement('div');
-            successAlert.className = "alert alert-success mb-3";
-            successAlert.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> PDF downloaded successfully!';
-            structuredNotesElement.parentNode.insertBefore(successAlert, structuredNotesElement);
-            
-            // Remove after 3 seconds
-            setTimeout(() => {
-                successAlert.remove();
-            }, 3000);
+            a.remove();
         })
         .catch(error => {
-            downloadingAlert.remove();
             console.error('Error downloading PDF:', error);
-            showError(`Error downloading PDF: ${error.message}`);
+            showError('Failed to download PDF. Please try again.');
+        })
+        .finally(() => {
+            // Reset button state
+            if (downloadPDFBtn) {
+                downloadPDFBtn.disabled = false;
+                downloadPDFBtn.innerHTML = '<i class="fas fa-file-pdf me-1"></i> Download PDF';
+            }
         });
     }
     
-    // Function to use manual transcript
-    function useManualTranscript() {
-        const transcript = manualTranscriptInput.value.trim();
-        
-        if (!transcript) {
-            showError('Please enter a transcript before proceeding.');
-            return;
-        }
-        
-        finalTranscript = transcript;
-        transcriptElement.textContent = finalTranscript;
-        
-        // Save to server
-        saveTranscriptToServer(finalTranscript);
-        
-        // Enable generate notes button
-        generateNotesBtn.disabled = false;
-    }
-    
-    // Attach event listeners if elements exist
+    // Add event listeners
     if (startRecordingBtn) startRecordingBtn.addEventListener('click', startRecording);
     if (stopRecordingBtn) stopRecordingBtn.addEventListener('click', stopRecording);
     if (clearTranscriptBtn) clearTranscriptBtn.addEventListener('click', clearTranscript);
@@ -392,10 +503,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             const file = audioFileInput.files[0];
+            console.log("Selected file:", file.name, "Size:", file.size, "Type:", file.type);
             
             // Validate file type
             const allowedTypes = ['.mp3', '.wav', '.m4a', '.ogg', '.flac'];
             const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+            console.log("File extension:", fileExtension);
+            
             if (!allowedTypes.includes(fileExtension)) {
                 showError(`Invalid file type. Allowed types: ${allowedTypes.join(', ')}`);
                 return;
@@ -418,6 +532,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const formData = new FormData();
             formData.append('audio_file', file);
             
+            // Debug: Log form data (can't see the actual file content but we can see if it's attached)
+            console.log("FormData created with file:", file.name);
+            
             // Send to server
             const xhr = new XMLHttpRequest();
             
@@ -425,6 +542,7 @@ document.addEventListener('DOMContentLoaded', () => {
             xhr.upload.addEventListener('progress', function(e) {
                 if (e.lengthComputable && uploadProgress) {
                     const percentComplete = Math.round((e.loaded / e.total) * 100);
+                    console.log(`Upload progress: ${percentComplete}%`);
                     const progressBar = uploadProgress.querySelector('.progress-bar');
                     if (progressBar) {
                         progressBar.style.width = percentComplete + '%';
@@ -434,9 +552,11 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             
             xhr.addEventListener('load', function() {
+                console.log("XHR load event, status:", xhr.status);
                 if (xhr.status === 200) {
                     // Parse the response
                     const response = JSON.parse(xhr.responseText);
+                    console.log("Response:", response);
                     
                     // Set the transcript
                     if (response.transcript) {
@@ -455,6 +575,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 } else {
                     // Handle error
+                    console.error("Error response:", xhr.status, xhr.responseText);
                     try {
                         const response = JSON.parse(xhr.responseText);
                         showError(`Error: ${response.error || 'Failed to transcribe audio file'}`);
@@ -471,7 +592,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 transcribeAudioFileBtn.innerHTML = '<i class="fas fa-upload me-1"></i> Upload & Transcribe';
             });
             
-            xhr.addEventListener('error', function() {
+            xhr.addEventListener('error', function(e) {
+                console.error("XHR error event:", e);
                 showError('Error: Network error while uploading file. Please try again.');
                 
                 // Reset UI state
@@ -483,8 +605,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             
             // Open and send the request
+            console.log("Opening XHR request to /transcribe-audio-file");
             xhr.open('POST', '/transcribe-audio-file', true);
             xhr.send(formData);
+            console.log("XHR request sent with form data");
         });
     }
 });
