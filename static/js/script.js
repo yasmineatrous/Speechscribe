@@ -16,10 +16,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const transcribeYoutubeBtn = document.getElementById('transcribe-youtube');
     const manualTranscriptInput = document.getElementById('manual-transcript');
     const useManualTranscriptBtn = document.getElementById('use-manual-transcript');
-    // Audio file upload elements
-    const audioFileInput = document.getElementById('audio-file-input');
-    const uploadAudioBtn = document.getElementById('upload-audio-btn');
-    const audioUploadProgress = document.getElementById('audio-upload-progress');
     
     // Global variables
     let recognition = null;
@@ -52,19 +48,19 @@ document.addEventListener('DOMContentLoaded', () => {
         recognition.onstart = function() {
             isRecording = true;
             recordingStatus.textContent = 'Recording...';
-            recordingIndicator.classList.remove('d-none');
-            recordingIndicator.classList.add('recording');
-            startRecordingBtn.classList.add('d-none');
-            stopRecordingBtn.classList.remove('d-none');
+            recordingIndicator.classList.remove('d-none')
+            recordingIndicator.classList.add('recording')
+            startRecordingBtn.disabled = true;
+            stopRecordingBtn.disabled = false;
         };
         
         recognition.onend = function() {
             isRecording = false;
             recordingStatus.textContent = 'Not recording';
-            recordingIndicator.classList.add('d-none');
-            recordingIndicator.classList.remove('recording');
-            startRecordingBtn.classList.remove('d-none');
-            stopRecordingBtn.classList.add('d-none');
+            recordingIndicator.classList.add('d-none')
+            recordingIndicator.classList.remove('recording')
+            startRecordingBtn.disabled = false;
+            stopRecordingBtn.disabled = true;
         };
         
         recognition.onresult = function(event) {
@@ -387,104 +383,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Function to upload and process audio file
-    function uploadAndProcessAudio() {
-        const fileInput = audioFileInput;
-        
-        if (!fileInput.files || fileInput.files.length === 0) {
-            showError('Please select an audio file to upload.');
-            return;
-        }
-        
-        const file = fileInput.files[0];
-        
-        // Check file type
-        const allowedTypes = ['.mp3', '.wav', '.m4a', '.ogg', '.flac'];
-        const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-        
-        if (!allowedTypes.includes(fileExtension)) {
-            showError(`Unsupported file format. Allowed formats: ${allowedTypes.join(', ')}`);
-            return;
-        }
-        
-        // Check file size (limit to 100MB)
-        const maxSize = 100 * 1024 * 1024; // 100MB in bytes
-        if (file.size > maxSize) {
-            showError(`File is too large. Maximum file size is 100MB.`);
-            return;
-        }
-        
-        // Show progress and disable button
-        audioUploadProgress.classList.remove('d-none');
-        uploadAudioBtn.disabled = true;
-        
-        // Clear previous transcript
-        finalTranscript = '';
-        
-        // Show detailed loading indicator in the transcript area
-        transcriptElement.innerHTML = `
-            <div class="text-center my-5">
-                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-                <h5 class="mt-3">Processing audio file...</h5>
-                <p class="text-muted">Converting and transcribing the audio. This may take a moment.</p>
-                <div class="progress mt-3" style="height: 10px;">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
-                </div>
-            </div>
-        `;
-        
-        structuredNotesElement.innerHTML = '';
-        
-        // Create form data
-        const formData = new FormData();
-        formData.append('audio_file', file);
-        
-        // Send audio file to server for transcription
-        fetch('/transcribe-audio-file', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            audioUploadProgress.classList.add('d-none');
-            uploadAudioBtn.disabled = false;
-            
-            if (data.error) {
-                showError(data.error);
-                transcriptElement.textContent = 'Error processing audio file. Please try again.';
-            } else {
-                finalTranscript = data.transcript;
-                
-                // Show success notification
-                const successAlert = document.createElement('div');
-                successAlert.className = "alert alert-success mb-3";
-                successAlert.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Audio successfully transcribed!';
-                
-                // Insert before transcript
-                transcriptElement.innerHTML = '';
-                transcriptElement.parentNode.insertBefore(successAlert, transcriptElement);
-                
-                // Set transcript and enable generate button
-                transcriptElement.textContent = finalTranscript;
-                generateNotesBtn.disabled = false;
-                
-                // Remove notification after 3 seconds
-                setTimeout(() => {
-                    successAlert.remove();
-                }, 3000);
-            }
-        })
-        .catch(error => {
-            audioUploadProgress.classList.add('d-none');
-            uploadAudioBtn.disabled = false;
-            console.error('Error processing audio file:', error);
-            showError(`Error processing audio file: ${error.message}`);
-            transcriptElement.textContent = 'Error processing audio file. Please try again.';
-        });
-    }
-    
-    // Event listeners
     startRecordingBtn.addEventListener('click', startRecording);
     stopRecordingBtn.addEventListener('click', stopRecording);
     clearTranscriptBtn.addEventListener('click', clearTranscript);
@@ -492,8 +390,6 @@ document.addEventListener('DOMContentLoaded', () => {
     downloadPDFBtn.addEventListener('click', downloadPDF);
     transcribeYoutubeBtn.addEventListener('click', getYoutubeTranscript);
     useManualTranscriptBtn.addEventListener('click', useManualTranscript);
-    uploadAudioBtn.addEventListener('click', uploadAndProcessAudio);
-    
     // Handle keyboard shortcuts
     document.addEventListener('keydown', (e) => {
         // Start recording with Ctrl+Shift+R
