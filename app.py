@@ -84,7 +84,7 @@ def generate_notes():
         logger.error(f"Error generating notes: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/download-pdf', methods=['GET'])
+@app.route('/download-pdf', methods=['GET', 'POST'])
 def download_pdf():
     """Generate and download PDF of structured notes"""
     try:
