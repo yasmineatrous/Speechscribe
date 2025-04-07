@@ -48,105 +48,91 @@ document.addEventListener('DOMContentLoaded', () => {
         recognition.onstart = function() {
             isRecording = true;
             recordingStatus.textContent = 'Recording...';
-            recordingIndicator.textContent = '🔴';
-            recordingIndicator.classList.add('active');
-            startRecordingBtn.disabled = true;
-            stopRecordingBtn.disabled = false;
-            generateNotesBtn.disabled = true;
+            recordingIndicator.classList.remove('d-none');
+            recordingIndicator.classList.add('recording');
+            startRecordingBtn.classList.add('d-none');
+            stopRecordingBtn.classList.remove('d-none');
         };
         
         recognition.onend = function() {
             isRecording = false;
-            recordingStatus.textContent = 'Not Recording';
-            recordingIndicator.textContent = '⚪';
-            recordingIndicator.classList.remove('active');
-            startRecordingBtn.disabled = false;
-            stopRecordingBtn.disabled = true;
-            generateNotesBtn.disabled = finalTranscript.trim() === '';
+            recordingStatus.textContent = 'Not recording';
+            recordingIndicator.classList.add('d-none');
+            recordingIndicator.classList.remove('recording');
+            startRecordingBtn.classList.remove('d-none');
+            stopRecordingBtn.classList.add('d-none');
+        };
+        
+        recognition.onresult = function(event) {
+            interimTranscript = '';
             
-            // Save the transcript to the server
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript + ' ';
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
+                }
+            }
+            
+            updateTranscriptDisplay();
+            
+            // Save transcript periodically
             if (finalTranscript.trim() !== '') {
                 saveTranscriptToServer(finalTranscript);
             }
         };
         
         recognition.onerror = function(event) {
-            console.error('Speech recognition error', event.error);
-            showError(`Speech recognition error: ${event.error}`);
-            stopRecording();
-        };
-        
-        recognition.onresult = function(event) {
-            interimTranscript = '';
+            let errorMsg = '';
             
-            // Process the results
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-                const transcript = event.results[i][0].transcript;
-                
-                if (event.results[i].isFinal) {
-                    finalTranscript += ' ' + transcript;
-                } else {
-                    interimTranscript += transcript;
-                }
+            switch(event.error) {
+                case 'no-speech':
+                    errorMsg = 'No speech detected. Please try again.';
+                    break;
+                case 'audio-capture':
+                    errorMsg = 'No microphone detected. Please check your microphone settings.';
+                    break;
+                case 'not-allowed':
+                    errorMsg = 'Microphone access denied. Please allow microphone access.';
+                    break;
+                default:
+                    errorMsg = `Error: ${event.error}`;
             }
             
-            // Update the display
-            updateTranscriptDisplay();
+            showError(errorMsg);
+            
+            // Stop recording on error
+            if (isRecording) {
+                recognition.stop();
+            }
         };
     }
     
-    // Start recording function
+    // Function to start recording
     function startRecording() {
+        finalTranscript = '';
+        interimTranscript = '';
+        transcriptElement.textContent = '';
+        structuredNotesElement.innerHTML = '';
+        
         try {
-            finalTranscript = '';
-            interimTranscript = '';
-            transcriptElement.textContent = 'Listening...';
             recognition.start();
-        } catch (error) {
-            console.error('Error starting speech recognition:', error);
-            showError(`Error starting speech recognition: ${error.message}`);
+        } catch (e) {
+            console.error('Recognition error:', e);
+            showError(`Error starting recognition: ${e.message}`);
         }
     }
     
-    // Stop recording function
+    // Function to stop recording
     function stopRecording() {
         if (isRecording) {
             recognition.stop();
         }
     }
     
-    // Update the transcript display
+    // Update transcript display
     function updateTranscriptDisplay() {
-        transcriptElement.innerHTML = '';
-        
-        // Add final transcript words
-        if (finalTranscript) {
-            const finalWords = finalTranscript.trim().split(' ');
-            finalWords.forEach(word => {
-                const wordSpan = document.createElement('span');
-                wordSpan.className = 'word final-word';
-                wordSpan.textContent = word + ' ';
-                transcriptElement.appendChild(wordSpan);
-            });
-        }
-        
-        // Add interim transcript words
-        if (interimTranscript) {
-            const interimWords = interimTranscript.trim().split(' ');
-            interimWords.forEach(word => {
-                const wordSpan = document.createElement('span');
-                wordSpan.className = 'word interim-word';
-                wordSpan.textContent = word + ' ';
-                transcriptElement.appendChild(wordSpan);
-            });
-        }
-        
-        // If empty, show placeholder
-        if (!finalTranscript && !interimTranscript) {
-            transcriptElement.textContent = 'Your speech will appear here...';
-        }
-        
-        // Enable/disable generate notes button
+        transcriptElement.textContent = finalTranscript + interimTranscript;
         generateNotesBtn.disabled = finalTranscript.trim() === '';
     }
     
@@ -190,8 +176,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // YouTube transcript function
-            if (statusMessage) {
-    // YouTube transcript function
     function getYoutubeTranscript() {
         const youtubeUrl = youtubeUrlInput.value.trim();
         
@@ -212,28 +196,35 @@ document.addEventListener('DOMContentLoaded', () => {
         transcribeYoutubeBtn.disabled = true;
         finalTranscript = '';
         
-        // Show detailed loading message
-        const loadingMsg = document.createElement('div');
-        loadingMsg.classList.add('text-center', 'mb-4');
-        loadingMsg.innerHTML = `
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <p class="mt-2">Extracting transcript from YouTube...</p>
-            <p class="small text-muted">This may take several moments for longer videos.</p>
-            <div class="progress mt-3">
-                <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+        // Show detailed loading message with spinner
+        transcriptElement.innerHTML = `
+            <div class="text-center my-5">
+                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <h5 class="mt-3">Extracting transcript from YouTube...</h5>
+                <p class="text-muted">This may take several moments for longer videos.</p>
+                <div class="progress mt-3" style="height: 10px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+                </div>
             </div>
         `;
-        transcriptElement.innerHTML = '';
-        transcriptElement.appendChild(loadingMsg);
         
         // Set a timeout to update the message for longer videos
         const longVideoTimeout = setTimeout(() => {
-            const statusMessage = loadingMsg.querySelector('p:not(.small)');
-            if (statusMessage) {
-                statusMessage.innerHTML = 'Still working... <br>Downloading and processing video audio. <br>For videos longer than 10 minutes, this may take a minute or two.';
-            }
+            transcriptElement.innerHTML = `
+                <div class="text-center my-5">
+                    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <h5 class="mt-3">Still working...</h5>
+                    <p class="text-muted">Downloading and processing video audio.</p>
+                    <p class="text-muted">For videos longer than 10 minutes, this may take a minute or two.</p>
+                    <div class="progress mt-3" style="height: 10px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+                    </div>
+                </div>
+            `;
         }, 5000);
         
         // Call API to get YouTube transcript
@@ -256,116 +247,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 transcriptElement.textContent = 'Error loading transcript. Please try again.';
             } else {
                 finalTranscript = data.transcript;
+                
+                // Show success notification
+                const successAlert = document.createElement('div');
+                successAlert.className = "alert alert-success mb-3";
+                successAlert.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Transcript successfully extracted!';
+                
+                // Insert success notification
+                transcriptElement.innerHTML = '';
+                transcriptElement.parentNode.insertBefore(successAlert, transcriptElement);
+                
+                // Set transcript text
                 transcriptElement.textContent = finalTranscript;
                 generateNotesBtn.disabled = false;
                 
-                // Add success notification
-                const successAlert = document.createElement('div');
-                successAlert.classList.add('alert', 'alert-success', 'mb-3');
-                successAlert.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Transcript successfully extracted!';
-                
-                // Insert before the transcript
-                transcriptElement.parentNode.insertBefore(successAlert, transcriptElement);
-                
-                // Remove after 3 seconds
+                // Remove notification after 3 seconds
                 setTimeout(() => {
                     successAlert.remove();
-                }, 3000);
-            }
-        })
-        .catch(error => {
-            clearTimeout(longVideoTimeout);
-            transcribeYoutubeBtn.disabled = false;
-            console.error('Error getting YouTube transcript:', error);
-            showError(`Error getting YouTube transcript: ${error.message}`);
-            transcriptElement.textContent = 'Error loading transcript. Please try again.';
-        });
-                statusMessage.innerHTML = 'Still working... <br>Downloading and processing video audio. <br>For videos longer than 10 minutes, this may take a minute or two.';
-            }
-        }, 5000);
-        
-        // Call API to get YouTube transcript
-        fetch('/transcribe-youtube', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ youtube_url: youtubeUrl }),
-        })
-        .then(response => {
-            clearTimeout(longVideoTimeout);
-            return response.json();
-        })
-        .then(data => {
-            transcribeYoutubeBtn.disabled = false;
-            
-            if (data.error) {
-                showError(data.error);
-                transcriptElement.textContent = 'Error loading transcript. Please try again.';
-            } else {
-                finalTranscript = data.transcript;
-                transcriptElement.textContent = finalTranscript;
-                generateNotesBtn.disabled = false;
-                
-                // Add success notification
-                const successAlert = document.createElement('div');
-                successAlert.classList.add("alert", "alert-success", "mb-3");
-                successAlert.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Transcript successfully extracted!';
-                
-                // Insert before the transcript
-                transcriptElement.parentNode.insertBefore(successAlert, transcriptElement);
-                
-                // Remove after 3 seconds
-                setTimeout(() => {
-
-                    ;
-                }, 3000);
-            }
-        })
-        .catch(error => {
-            clearTimeout(longVideoTimeout);
-            transcribeYoutubeBtn.disabled = false;
-            console.error('Error getting YouTube transcript:', error);
-            showError(`Error getting YouTube transcript: ${error.message}`);
-            transcriptElement.textContent = 'Error loading transcript. Please try again.';
-        });
-        }, 5000);
-        
-        // Call API to get YouTube transcript
-        fetch('/transcribe-youtube', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ youtube_url: youtubeUrl }),
-        })
-        .then(response => {
-            clearTimeout(longVideoTimeout);
-            return response.json();
-        })
-        .then(data => {
-            transcribeYoutubeBtn.disabled = false;
-            
-            if (data.error) {
-                showError(data.error);
-                transcriptElement.textContent = 'Error loading transcript. Please try again.';
-            } else {
-                finalTranscript = data.transcript;
-                transcriptElement.textContent = finalTranscript;
-                generateNotesBtn.disabled = false;
-                
-                // Add success notification
-                const successAlert = document.createElement('div');
-                successAlert.classList.add("alert", "alert-success", "mb-3");
-                successAlert.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Transcript successfully extracted!';
-                
-                // Insert before the transcript
-                transcriptElement.parentNode.insertBefore(successAlert, transcriptElement);
-                
-                // Remove after 3 seconds
-                setTimeout(() => {
-
-                    ;
                 }, 3000);
             }
         })
@@ -400,9 +298,8 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .then(response => response.json())
         .then(data => {
-            // Hide loading state
-            notesLoading.classList.add('d-none');
             generateNotesBtn.disabled = false;
+            notesLoading.classList.add('d-none');
             
             if (data.error) {
                 showError(data.error);
@@ -411,33 +308,78 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Render markdown content
                 structuredNotesElement.innerHTML = renderMarkdown(data.notes);
                 downloadPDFBtn.disabled = false;
+                
+                // Show success notification
+                const successAlert = document.createElement('div');
+                successAlert.className = "alert alert-success mb-3";
+                successAlert.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Notes successfully generated!';
+                
+                // Insert before the notes
+                structuredNotesElement.parentNode.insertBefore(successAlert, structuredNotesElement);
+                
+                // Remove after 3 seconds
+                setTimeout(() => {
+                    successAlert.remove();
+                }, 3000);
             }
         })
         .catch(error => {
-            // Hide loading state
-            notesLoading.classList.add('d-none');
             generateNotesBtn.disabled = false;
-            
+            notesLoading.classList.add('d-none');
             console.error('Error generating notes:', error);
             showError(`Error generating notes: ${error.message}`);
             structuredNotesElement.innerHTML = '<em>Error generating notes. Please try again.</em>';
         });
     }
     
-    // Clear transcript function
+    // Function to clear transcript
     function clearTranscript() {
         finalTranscript = '';
         interimTranscript = '';
-        updateTranscriptDisplay();
+        transcriptElement.textContent = '';
+        structuredNotesElement.innerHTML = '';
         generateNotesBtn.disabled = true;
         downloadPDFBtn.disabled = true;
-        structuredNotesElement.innerHTML = '<em>Generated notes will appear here...</em>';
-        youtubeUrlInput.value = '';
     }
     
     // Download PDF function
     function downloadPDF() {
-        window.open('/download-pdf', '_blank');
+        const notes = structuredNotesElement.innerHTML;
+        
+        if (!notes) {
+            showError('Please generate notes before downloading PDF.');
+            return;
+        }
+        
+        // Create a form and submit it to trigger PDF download
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/download-pdf';
+        
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'notes_html';
+        input.value = notes;
+        
+        form.appendChild(input);
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
+    }
+    
+    // Function to use manual transcript
+    function useManualTranscript() {
+        const transcript = manualTranscriptInput.value.trim();
+        
+        if (!transcript) {
+            showError('Please enter a transcript before proceeding.');
+            return;
+        }
+        
+        finalTranscript = transcript;
+        transcriptElement.textContent = finalTranscript;
+        generateNotesBtn.disabled = false;
+        saveTranscriptToServer(finalTranscript);
     }
     
     // Event listeners
@@ -447,11 +389,24 @@ document.addEventListener('DOMContentLoaded', () => {
     generateNotesBtn.addEventListener('click', generateNotes);
     downloadPDFBtn.addEventListener('click', downloadPDF);
     transcribeYoutubeBtn.addEventListener('click', getYoutubeTranscript);
+    useManualTranscriptBtn.addEventListener('click', useManualTranscript);
     
-    // Handle Enter key on YouTube URL input
-    youtubeUrlInput.addEventListener('keypress', (event) => {
-        if (event.key === 'Enter') {
-            getYoutubeTranscript();
+    // Handle keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        // Start recording with Ctrl+Shift+R
+        if (e.ctrlKey && e.shiftKey && e.key === 'R') {
+            e.preventDefault();
+            if (!isRecording && !startRecordingBtn.disabled) {
+                startRecording();
+            }
+        }
+        
+        // Stop recording with Ctrl+Shift+S
+        if (e.ctrlKey && e.shiftKey && e.key === 'S') {
+            e.preventDefault();
+            if (isRecording) {
+                stopRecording();
+            }
         }
     });
     
