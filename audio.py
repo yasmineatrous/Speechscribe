@@ -121,15 +121,53 @@ def save_audio_from_blob(audio_blob):
         logger.error(f"Error saving audio blob: {str(e)}")
         raise e
 
+def extract_audio_from_video(video_path, output_path):
+    """
+    Extract audio from a video file using pydub
+    
+    Args:
+        video_path (str): Path to the video file
+        output_path (str): Path where the extracted audio will be saved
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        logger.info(f"Extracting audio from video file: {video_path}")
+        
+        # Load the video file with pydub
+        video = AudioSegment.from_file(video_path)
+        
+        # Set frame rate to 16kHz for better speech recognition
+        audio = video.set_frame_rate(16000)
+        
+        # Export as WAV
+        audio.export(output_path, format="wav")
+        
+        # Verify the output file exists and has content
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            logger.info(f"Audio extraction successful: {output_path}")
+            return True
+        else:
+            logger.error(f"Audio extraction failed: Output file is empty or does not exist")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error extracting audio from video: {str(e)}")
+        return False
+
 def process_uploaded_audio(uploaded_file):
     """
-    Process and transcribe an uploaded audio file (MP3, WAV, etc.)
+    Process and transcribe an uploaded audio or video file (MP3, WAV, MP4, etc.)
+    
+    This function automatically detects if the file is a video format and extracts the audio,
+    then transcribes the audio using Groq's Whisper API.
     
     Args:
         uploaded_file: The uploaded file object from Flask request.files
         
     Returns:
-        str: Transcribed text from the audio file
+        str: Transcribed text from the audio portion of the file
     """
     # Create unique filenames first
     file_id = str(uuid.uuid4())
@@ -137,7 +175,7 @@ def process_uploaded_audio(uploaded_file):
     wav_path = None
     
     try:
-        logger.info(f"Processing uploaded audio file: {uploaded_file.filename}")
+        logger.info(f"Processing uploaded file: {uploaded_file.filename}")
         
         # Get file metadata
         original_filename = uploaded_file.filename
@@ -159,11 +197,20 @@ def process_uploaded_audio(uploaded_file):
         
         if file_size == 0:
             logger.error("Uploaded file is empty (0 bytes)")
-            return "Error: The uploaded file is empty. Please try again with a valid audio file."
+            return "Error: The uploaded file is empty. Please try again with a valid file."
         
-        # Convert to WAV if needed
-        if file_extension.lower() != '.wav':
-            logger.info(f"Converting {file_extension} file to WAV format")
+        # Check if it's a video file
+        video_extensions = {'.mp4', '.mov', '.avi', '.mkv', '.webm'}
+        is_video = file_extension in video_extensions
+        
+        # Process based on file type
+        if is_video:
+            logger.info(f"Processing video file: {file_extension}")
+            if not extract_audio_from_video(temp_input_path, wav_path):
+                return "Error: Could not extract audio from video file."
+        elif file_extension.lower() != '.wav':
+            # Convert audio to WAV if needed
+            logger.info(f"Converting {file_extension} audio file to WAV format")
             try:
                 # Load the audio file with pydub
                 logger.debug(f"Loading audio file: {temp_input_path}")
@@ -247,7 +294,7 @@ def process_uploaded_audio(uploaded_file):
         except Exception as cleanup_error:
             logger.warning(f"Error during cleanup: {str(cleanup_error)}")
             
-        return f"Error processing audio file: {str(e)}"
+        return f"Error processing media file: {str(e)}"
 
 def transcribe_youtube_audio(audio_file_path):
     """

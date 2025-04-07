@@ -292,7 +292,7 @@ def save_transcript():
 
 @app.route('/transcribe-audio-file', methods=['POST'])
 def transcribe_audio_file():
-    """Process and transcribe an uploaded audio file (MP3, WAV, etc.)"""
+    """Process and transcribe an uploaded audio or video file (MP3, WAV, MP4, etc.)"""
     try:
         # Log request data for debugging
         logger.info(f"Request files: {list(request.files.keys())}")
@@ -311,7 +311,10 @@ def transcribe_audio_file():
             return jsonify({'error': 'No file selected'}), 400
         
         # Check file extension
-        allowed_extensions = {'.mp3', '.wav', '.m4a', '.ogg', '.flac'}
+        allowed_audio_extensions = {'.mp3', '.wav', '.m4a', '.ogg', '.flac'}
+        allowed_video_extensions = {'.mp4', '.mov', '.avi', '.mkv', '.webm'}
+        allowed_extensions = allowed_audio_extensions.union(allowed_video_extensions)
+        
         file_ext = os.path.splitext(audio_file.filename)[1].lower()
         logger.info(f"File extension: {file_ext}")
         
@@ -319,13 +322,16 @@ def transcribe_audio_file():
             return jsonify({
                 'error': f'Unsupported file format. Allowed formats: {", ".join(allowed_extensions)}'
             }), 400
+            
+        is_video = file_ext in allowed_video_extensions
+        logger.info(f"Is video file: {is_video}")
         
         # Make sure uploads directory exists
         uploads_dir = os.path.join(os.getcwd(), 'uploads')
         os.makedirs(uploads_dir, exist_ok=True)
         
-        # Process and transcribe the audio file
-        logger.info("Starting audio transcription process...")
+        # Process and transcribe the audio/video file
+        logger.info("Starting transcription process...")
         
         try:
             transcript = process_uploaded_audio(audio_file)
@@ -333,7 +339,7 @@ def transcribe_audio_file():
             
             # Check if there was an error
             if transcript.startswith('Error'):
-                logger.error(f"Error transcribing audio file: {transcript}")
+                logger.error(f"Error transcribing file: {transcript}")
                 return jsonify({'error': transcript}), 400
                 
             if transcript.startswith('⚠️'):
@@ -352,14 +358,14 @@ def transcribe_audio_file():
             logger.error(traceback.format_exc())
             
             # Provide a user-friendly message
-            error_message = "Sorry, we couldn't process your audio file. This could be due to network restrictions or an unsupported audio format. Please try using YouTube transcription instead."
+            error_message = "Sorry, we couldn't process your media file. This could be due to network restrictions or an unsupported format. Please try using YouTube transcription instead."
             return jsonify({'error': error_message}), 500
     
     except Exception as e:
-        logger.error(f"Error processing audio file: {str(e)}")
+        logger.error(f"Error processing media file: {str(e)}")
         import traceback
         logger.error(traceback.format_exc())  # Log full traceback
-        return jsonify({'error': f"Failed to process audio file: {str(e)}"}), 500
+        return jsonify({'error': f"Failed to process media file: {str(e)}"}), 500
 
 @app.route('/transcribe-youtube', methods=['POST'])
 def transcribe_youtube():

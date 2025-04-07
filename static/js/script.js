@@ -506,7 +506,9 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log("Selected file:", file.name, "Size:", file.size, "Type:", file.type);
             
             // Validate file type
-            const allowedTypes = ['.mp3', '.wav', '.m4a', '.ogg', '.flac'];
+            const allowedAudioTypes = ['.mp3', '.wav', '.m4a', '.ogg', '.flac'];
+            const allowedVideoTypes = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+            const allowedTypes = [...allowedAudioTypes, ...allowedVideoTypes];
             const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
             console.log("File extension:", fileExtension);
             
