@@ -17,6 +17,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const manualTranscriptInput = document.getElementById('manual-transcript');
     const useManualTranscriptBtn = document.getElementById('use-manual-transcript');
     
+    // File upload functionality
+    const audioFileInput = document.getElementById('audio-file');
+    const transcribeAudioFileBtn = document.getElementById('transcribe-audio-file');
+    const uploadProgress = document.getElementById('upload-progress');
+    
     // Global variables
     let recognition = null;
     let finalTranscript = '';
@@ -35,7 +40,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Check if the browser supports speech recognition
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-        startRecordingBtn.disabled = true;
+        if (startRecordingBtn) {
+            startRecordingBtn.disabled = true;
+        }
         showError('Your browser does not support speech recognition. Please use Chrome or Edge.');
     } else {
         // Initialize speech recognition
@@ -48,19 +55,25 @@ document.addEventListener('DOMContentLoaded', () => {
         recognition.onstart = function() {
             isRecording = true;
             recordingStatus.textContent = 'Recording...';
-            recordingIndicator.classList.remove('d-none')
-            recordingIndicator.classList.add('recording')
-            startRecordingBtn.disabled = true;
-            stopRecordingBtn.disabled = false;
+            recordingIndicator.textContent = '🔴';
+            recordingIndicator.style.color = 'red';
+            
+            // Toggle buttons
+            if (startRecordingBtn) startRecordingBtn.disabled = true;
+            if (stopRecordingBtn) stopRecordingBtn.disabled = false;
+            if (clearTranscriptBtn) clearTranscriptBtn.disabled = true;
         };
         
         recognition.onend = function() {
             isRecording = false;
-            recordingStatus.textContent = 'Not recording';
-            recordingIndicator.classList.add('d-none')
-            recordingIndicator.classList.remove('recording')
-            startRecordingBtn.disabled = false;
-            stopRecordingBtn.disabled = true;
+            recordingStatus.textContent = 'Ready';
+            recordingIndicator.textContent = '⚪';
+            recordingIndicator.style.color = '';
+            
+            // Toggle buttons
+            if (startRecordingBtn) startRecordingBtn.disabled = false;
+            if (stopRecordingBtn) stopRecordingBtn.disabled = true;
+            if (clearTranscriptBtn) clearTranscriptBtn.disabled = false;
         };
         
         recognition.onresult = function(event) {
@@ -75,65 +88,62 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             updateTranscriptDisplay();
-            
-            // Save transcript periodically
-            if (finalTranscript.trim() !== '') {
-                saveTranscriptToServer(finalTranscript);
-            }
         };
         
         recognition.onerror = function(event) {
-            let errorMsg = '';
+            console.error('Speech recognition error', event.error);
             
-            switch(event.error) {
-                case 'no-speech':
-                    errorMsg = 'No speech detected. Please try again.';
-                    break;
-                case 'audio-capture':
-                    errorMsg = 'No microphone detected. Please check your microphone settings.';
-                    break;
-                case 'not-allowed':
-                    errorMsg = 'Microphone access denied. Please allow microphone access.';
-                    break;
-                default:
-                    errorMsg = `Error: ${event.error}`;
+            if (event.error === 'no-speech') {
+                recordingStatus.textContent = 'No speech detected';
+            } else {
+                showError(`Speech recognition error: ${event.error}`);
             }
             
-            showError(errorMsg);
-            
             // Stop recording on error
-            if (isRecording) {
+            if (recognition) {
                 recognition.stop();
             }
         };
     }
     
-    // Function to start recording
+    // Start recording function
     function startRecording() {
         finalTranscript = '';
         interimTranscript = '';
-        transcriptElement.textContent = '';
-        structuredNotesElement.innerHTML = '';
+        updateTranscriptDisplay();
         
-        try {
-            recognition.start();
-        } catch (e) {
-            console.error('Recognition error:', e);
-            showError(`Error starting recognition: ${e.message}`);
+        if (recognition) {
+            try {
+                recognition.start();
+            } catch (e) {
+                console.error('Error starting recognition:', e);
+                showError(`Could not start recording: ${e.message}`);
+            }
         }
     }
     
-    // Function to stop recording
+    // Stop recording function
     function stopRecording() {
-        if (isRecording) {
+        if (recognition) {
             recognition.stop();
+            
+            // If we have a final transcript, enable the generate notes button
+            if (finalTranscript.trim()) {
+                if (generateNotesBtn) {
+                    generateNotesBtn.disabled = false;
+                }
+            }
         }
     }
     
     // Update transcript display
     function updateTranscriptDisplay() {
-        transcriptElement.textContent = finalTranscript + interimTranscript;
-        generateNotesBtn.disabled = finalTranscript.trim() === '';
+        transcriptElement.innerHTML = finalTranscript + '<span style="color: #aaa">' + interimTranscript + '</span>';
+        
+        // Save transcript to server
+        if (finalTranscript.trim()) {
+            saveTranscriptToServer(finalTranscript.trim());
+        }
     }
     
     // Save transcript to server
@@ -143,91 +153,47 @@ document.addEventListener('DOMContentLoaded', () => {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ transcript: transcript.trim() }),
+            body: JSON.stringify({ transcript: transcript }),
         })
         .then(response => response.json())
         .then(data => {
             if (data.error) {
-                showError(data.error);
+                console.error('Error saving transcript:', data.error);
             }
         })
         .catch(error => {
             console.error('Error saving transcript:', error);
-            showError(`Error saving transcript: ${error.message}`);
         });
     }
     
-    // Function to render Markdown content safely
+    // Render markdown
     function renderMarkdown(markdownText) {
-        // Convert markdown to HTML using marked.js
-        const rawHtml = marked.parse(markdownText);
+        // Use the marked library to convert markdown to HTML
+        const rawHTML = marked.parse(markdownText);
         
-        // Sanitize the HTML using DOMPurify
-        const sanitizedHtml = DOMPurify.sanitize(rawHtml, {
-            ADD_ATTR: ['target'],
-            ALLOWED_TAGS: [
-                'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'p', 'a', 'ul', 'ol', 
-                'nl', 'li', 'b', 'i', 'strong', 'em', 'strike', 'code', 'hr', 'br', 'div', 
-                'table', 'thead', 'caption', 'tbody', 'tr', 'th', 'td', 'pre', 'span'
-            ],
-        });
+        // Sanitize the HTML to prevent XSS
+        const sanitizedHTML = DOMPurify.sanitize(rawHTML);
         
-        return sanitizedHtml;
+        return sanitizedHTML;
     }
     
-    // YouTube transcript function
+    // Get YouTube transcript
     function getYoutubeTranscript() {
         const youtubeUrl = youtubeUrlInput.value.trim();
         
         if (!youtubeUrl) {
-            showError('Please enter a valid YouTube URL');
+            showError('Please enter a YouTube URL.');
             return;
         }
         
-        // Validate URL format
-        if (!youtubeUrl.startsWith('https://www.youtube.com/') && 
-            !youtubeUrl.startsWith('https://youtu.be/') &&
-            !youtubeUrl.startsWith('https://youtube.com/')) {
-            showError('Please enter a valid YouTube URL starting with https://www.youtube.com/ or https://youtu.be/');
-            return;
-        }
-        
-        // Disable buttons and show loading
+        // Show loading state
         transcribeYoutubeBtn.disabled = true;
-        finalTranscript = '';
+        transcribeYoutubeBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Processing...';
         
-        // Show detailed loading message with spinner
-        transcriptElement.innerHTML = `
-            <div class="text-center my-5">
-                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-                <h5 class="mt-3">Extracting transcript from YouTube...</h5>
-                <p class="text-muted">This may take several moments for longer videos.</p>
-                <div class="progress mt-3" style="height: 10px;">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
-                </div>
-            </div>
-        `;
+        // Show intermediate message in transcript area
+        transcriptElement.innerHTML = '<div class="text-center my-4"><div class="spinner-border text-primary" role="status"></div><p class="mt-2">Fetching transcript from YouTube...<br>This may take a moment for longer videos.</p></div>';
         
-        // Set a timeout to update the message for longer videos
-        const longVideoTimeout = setTimeout(() => {
-            transcriptElement.innerHTML = `
-                <div class="text-center my-5">
-                    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <h5 class="mt-3">Still working...</h5>
-                    <p class="text-muted">Downloading and processing video audio.</p>
-                    <p class="text-muted">For videos longer than 10 minutes, this may take a minute or two.</p>
-                    <div class="progress mt-3" style="height: 10px;">
-                        <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
-                    </div>
-                </div>
-            `;
-        }, 5000);
-        
-        // Call API to get YouTube transcript
+        // Call the API
         fetch('/transcribe-youtube', {
             method: 'POST',
             headers: {
@@ -235,114 +201,94 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             body: JSON.stringify({ youtube_url: youtubeUrl }),
         })
-        .then(response => {
-            clearTimeout(longVideoTimeout);
-            return response.json();
-        })
+        .then(response => response.json())
         .then(data => {
-            transcribeYoutubeBtn.disabled = false;
-            
             if (data.error) {
                 showError(data.error);
-                transcriptElement.textContent = 'Error loading transcript. Please try again.';
+                transcriptElement.textContent = 'Error fetching transcript. Please try again.';
             } else {
+                // Update the transcript
                 finalTranscript = data.transcript;
+                updateTranscriptDisplay();
                 
-                // Show success notification
-                const successAlert = document.createElement('div');
-                successAlert.className = "alert alert-success mb-3";
-                successAlert.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Transcript successfully extracted!';
-                
-                // Insert success notification
-                transcriptElement.innerHTML = '';
-                transcriptElement.parentNode.insertBefore(successAlert, transcriptElement);
-                
-                // Set transcript text
-                transcriptElement.textContent = finalTranscript;
-                generateNotesBtn.disabled = false;
-                
-                // Remove notification after 3 seconds
-                setTimeout(() => {
-                    successAlert.remove();
-                }, 3000);
+                // Enable generate notes button
+                if (generateNotesBtn) {
+                    generateNotesBtn.disabled = false;
+                }
             }
         })
         .catch(error => {
-            clearTimeout(longVideoTimeout);
+            console.error('Error:', error);
+            showError(`Error fetching YouTube transcript: ${error.message}`);
+            transcriptElement.textContent = 'Error fetching transcript. Please try again.';
+        })
+        .finally(() => {
+            // Reset button state
             transcribeYoutubeBtn.disabled = false;
-            console.error('Error getting YouTube transcript:', error);
-            showError(`Error getting YouTube transcript: ${error.message}`);
-            transcriptElement.textContent = 'Error loading transcript. Please try again.';
+            transcribeYoutubeBtn.innerHTML = '<i class="fas fa-download me-1"></i> Get YouTube Transcript';
         });
     }
     
-    // Generate notes from transcript
+    // Generate notes function
     function generateNotes() {
-        if (finalTranscript.trim() === '') {
-            showError('Please record some speech or get a YouTube transcript before generating notes.');
+        // Make sure we have a transcript
+        if (!finalTranscript.trim()) {
+            showError('Please record or enter a transcript first.');
             return;
         }
         
-        // Show loading state
+        // Show loading indicator
         notesLoading.classList.remove('d-none');
         generateNotesBtn.disabled = true;
-        structuredNotesElement.innerHTML = '<em>Generating...</em>';
         
-        // Call API to generate notes
+        // Call the API to generate structured notes
         fetch('/generate-notes', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ transcript: finalTranscript.trim() }),
+            body: JSON.stringify({ transcript: finalTranscript }),
         })
         .then(response => response.json())
         .then(data => {
-            generateNotesBtn.disabled = false;
-            notesLoading.classList.add('d-none');
-            
             if (data.error) {
                 showError(data.error);
-                structuredNotesElement.innerHTML = '<em>Error generating notes. Please try again.</em>';
             } else {
-                // Render markdown content
+                // Update the notes display with markdown rendering
                 structuredNotesElement.innerHTML = renderMarkdown(data.notes);
-                downloadPDFBtn.disabled = false;
                 
-                // Show success notification
-                const successAlert = document.createElement('div');
-                successAlert.className = "alert alert-success mb-3";
-                successAlert.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Notes successfully generated!';
-                
-                // Insert before the notes
-                structuredNotesElement.parentNode.insertBefore(successAlert, structuredNotesElement);
-                
-                // Remove after 3 seconds
-                setTimeout(() => {
-                    successAlert.remove();
-                }, 3000);
+                // Enable PDF download
+                if (downloadPDFBtn) {
+                    downloadPDFBtn.disabled = false;
+                }
             }
         })
         .catch(error => {
-            generateNotesBtn.disabled = false;
-            notesLoading.classList.add('d-none');
-            console.error('Error generating notes:', error);
+            console.error('Error:', error);
             showError(`Error generating notes: ${error.message}`);
-            structuredNotesElement.innerHTML = '<em>Error generating notes. Please try again.</em>';
+        })
+        .finally(() => {
+            // Hide loading indicator
+            notesLoading.classList.add('d-none');
+            generateNotesBtn.disabled = false;
         });
     }
     
-    // Function to clear transcript
+    // Clear transcript function
     function clearTranscript() {
         finalTranscript = '';
         interimTranscript = '';
-        transcriptElement.textContent = '';
-        structuredNotesElement.innerHTML = '';
-        generateNotesBtn.disabled = true;
-        downloadPDFBtn.disabled = true;
+        updateTranscriptDisplay();
+        
+        // Disable generate notes button
+        if (generateNotesBtn) {
+            generateNotesBtn.disabled = true;
+        }
+        
+        // Show placeholder text
+        transcriptElement.textContent = 'Your transcript will appear here...';
     }
     
-    // Download PDF function
     // Download PDF function
     function downloadPDF() {
         const notes = structuredNotesElement.textContent || structuredNotesElement.innerText;
@@ -407,6 +353,8 @@ document.addEventListener('DOMContentLoaded', () => {
             showError(`Error downloading PDF: ${error.message}`);
         });
     }
+    
+    // Function to use manual transcript
     function useManualTranscript() {
         const transcript = manualTranscriptInput.value.trim();
         
@@ -417,133 +365,126 @@ document.addEventListener('DOMContentLoaded', () => {
         
         finalTranscript = transcript;
         transcriptElement.textContent = finalTranscript;
-        generateNotesBtn.disabled = false;
+        
+        // Save to server
         saveTranscriptToServer(finalTranscript);
+        
+        // Enable generate notes button
+        generateNotesBtn.disabled = false;
     }
-
-    // Function to upload and process audio file
-    startRecordingBtn.addEventListener('click', startRecording);
-    stopRecordingBtn.addEventListener('click', stopRecording);
-    clearTranscriptBtn.addEventListener('click', clearTranscript);
-    generateNotesBtn.addEventListener('click', generateNotes);
-    downloadPDFBtn.addEventListener('click', downloadPDF);
-    transcribeYoutubeBtn.addEventListener('click', getYoutubeTranscript);
-    useManualTranscriptBtn.addEventListener('click', useManualTranscript);
-    // Handle keyboard shortcuts
-    document.addEventListener('keydown', (e) => {
-        // Start recording with Ctrl+Shift+R
-        if (e.ctrlKey && e.shiftKey && e.key === 'R') {
-            e.preventDefault();
-            if (!isRecording && !startRecordingBtn.disabled) {
-                startRecording();
-            }
-        }
-        
-        // Stop recording with Ctrl+Shift+S
-        if (e.ctrlKey && e.shiftKey && e.key === 'S') {
-            e.preventDefault();
-            if (isRecording) {
-                stopRecording();
-            }
-        }
-    });
     
-    // Handle page unload to stop recording
-    window.addEventListener('beforeunload', () => {
-        if (isRecording) {
-            recognition.stop();
-        }
-    });
-});
-
-    // File upload functionality
-    const audioFileInput = document.getElementById('audio-file');
-    const transcribeAudioFileBtn = document.getElementById('transcribe-audio-file');
-    const uploadProgress = document.getElementById('upload-progress');
-    const uploadProgressBar = uploadProgress.querySelector('.progress-bar');
+    // Attach event listeners if elements exist
+    if (startRecordingBtn) startRecordingBtn.addEventListener('click', startRecording);
+    if (stopRecordingBtn) stopRecordingBtn.addEventListener('click', stopRecording);
+    if (clearTranscriptBtn) clearTranscriptBtn.addEventListener('click', clearTranscript);
+    if (generateNotesBtn) generateNotesBtn.addEventListener('click', generateNotes);
+    if (downloadPDFBtn) downloadPDFBtn.addEventListener('click', downloadPDF);
+    if (transcribeYoutubeBtn) transcribeYoutubeBtn.addEventListener('click', getYoutubeTranscript);
+    if (useManualTranscriptBtn) useManualTranscriptBtn.addEventListener('click', useManualTranscript);
     
-    // Audio file upload handler
-    transcribeAudioFileBtn.addEventListener('click', function() {
-        // Check if a file is selected
-        if (!audioFileInput.files.length) {
-            showError('Please select an audio file first.');
-            return;
-        }
-        
-        const file = audioFileInput.files[0];
-        
-        // Validate file type
-        const allowedTypes = ['.mp3', '.wav', '.m4a', '.ogg', '.flac'];
-        const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
-        if (!allowedTypes.includes(fileExtension)) {
-            showError(`Invalid file type. Allowed types: ${allowedTypes.join(', ')}`);
-            return;
-        }
-        
-        // Show loading state
-        transcribeAudioFileBtn.disabled = true;
-        transcribeAudioFileBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Processing...';
-        uploadProgress.classList.remove('d-none');
-        uploadProgressBar.style.width = '0%';
-        
-        // Create form data
-        const formData = new FormData();
-        formData.append('audio_file', file);
-        
-        // Send to server
-        const xhr = new XMLHttpRequest();
-        
-        // Track upload progress
-        xhr.upload.addEventListener('progress', function(e) {
-            if (e.lengthComputable) {
-                const percentComplete = Math.round((e.loaded / e.total) * 100);
-                uploadProgressBar.style.width = percentComplete + '%';
-                uploadProgressBar.textContent = percentComplete + '%';
+    // File upload handler
+    if (transcribeAudioFileBtn && audioFileInput) {
+        transcribeAudioFileBtn.addEventListener('click', function() {
+            // Check if a file is selected
+            if (!audioFileInput.files.length) {
+                showError('Please select an audio file first.');
+                return;
             }
-        });
-        
-        xhr.addEventListener('load', function() {
-            if (xhr.status === 200) {
-                // Parse the response
-                const response = JSON.parse(xhr.responseText);
-                
-                // Set the transcript
-                if (response.transcript) {
-                    finalTranscript = response.transcript;
-                    updateTranscriptDisplay();
-                    
-                    // Enable generate notes button
-                    generateNotesBtn.disabled = false;
-                    
-                    // Reset form
-                    audioFileInput.value = '';
+            
+            const file = audioFileInput.files[0];
+            
+            // Validate file type
+            const allowedTypes = ['.mp3', '.wav', '.m4a', '.ogg', '.flac'];
+            const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+            if (!allowedTypes.includes(fileExtension)) {
+                showError(`Invalid file type. Allowed types: ${allowedTypes.join(', ')}`);
+                return;
+            }
+            
+            // Show loading state
+            transcribeAudioFileBtn.disabled = true;
+            transcribeAudioFileBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Processing...';
+            
+            // Show progress if element exists
+            if (uploadProgress) {
+                uploadProgress.classList.remove('d-none');
+                const progressBar = uploadProgress.querySelector('.progress-bar');
+                if (progressBar) {
+                    progressBar.style.width = '0%';
                 }
-            } else {
-                // Handle error
-                try {
+            }
+            
+            // Create form data
+            const formData = new FormData();
+            formData.append('audio_file', file);
+            
+            // Send to server
+            const xhr = new XMLHttpRequest();
+            
+            // Track upload progress
+            xhr.upload.addEventListener('progress', function(e) {
+                if (e.lengthComputable && uploadProgress) {
+                    const percentComplete = Math.round((e.loaded / e.total) * 100);
+                    const progressBar = uploadProgress.querySelector('.progress-bar');
+                    if (progressBar) {
+                        progressBar.style.width = percentComplete + '%';
+                        progressBar.textContent = percentComplete + '%';
+                    }
+                }
+            });
+            
+            xhr.addEventListener('load', function() {
+                if (xhr.status === 200) {
+                    // Parse the response
                     const response = JSON.parse(xhr.responseText);
-                    showError(`Error: ${response.error || 'Failed to transcribe audio file'}`);
-                } catch (e) {
-                    showError('Error: Failed to transcribe audio file. Server returned an invalid response.');
+                    
+                    // Set the transcript
+                    if (response.transcript) {
+                        finalTranscript = response.transcript;
+                        if (transcriptElement) {
+                            transcriptElement.textContent = finalTranscript;
+                        }
+                        
+                        // Enable generate notes button
+                        if (generateNotesBtn) {
+                            generateNotesBtn.disabled = false;
+                        }
+                        
+                        // Reset form
+                        audioFileInput.value = '';
+                    }
+                } else {
+                    // Handle error
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        showError(`Error: ${response.error || 'Failed to transcribe audio file'}`);
+                    } catch (e) {
+                        showError('Error: Failed to transcribe audio file. Server returned an invalid response.');
+                    }
                 }
-            }
+                
+                // Reset UI state
+                if (uploadProgress) {
+                    uploadProgress.classList.add('d-none');
+                }
+                transcribeAudioFileBtn.disabled = false;
+                transcribeAudioFileBtn.innerHTML = '<i class="fas fa-upload me-1"></i> Upload & Transcribe';
+            });
             
-            // Reset UI state
-            uploadProgress.classList.add('d-none');
-            transcribeAudioFileBtn.disabled = false;
-            transcribeAudioFileBtn.innerHTML = '<i class="fas fa-upload me-1"></i> Upload & Transcribe';
-        });
-        
-        xhr.addEventListener('error', function() {
-            showError('Error: Network error while uploading file. Please try again.');
+            xhr.addEventListener('error', function() {
+                showError('Error: Network error while uploading file. Please try again.');
+                
+                // Reset UI state
+                if (uploadProgress) {
+                    uploadProgress.classList.add('d-none');
+                }
+                transcribeAudioFileBtn.disabled = false;
+                transcribeAudioFileBtn.innerHTML = '<i class="fas fa-upload me-1"></i> Upload & Transcribe';
+            });
             
-            // Reset UI state
-            uploadProgress.classList.add('d-none');
-            transcribeAudioFileBtn.disabled = false;
-            transcribeAudioFileBtn.innerHTML = '<i class="fas fa-upload me-1"></i> Upload & Transcribe';
+            // Open and send the request
+            xhr.open('POST', '/transcribe-audio-file', true);
+            xhr.send(formData);
         });
-        
-        // Open and send the request
-        xhr.open('POST', '/transcribe-audio-file', true);
-        xhr.send(formData);
-    });
+    }
+});
