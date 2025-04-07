@@ -45,9 +45,22 @@
                             </button>
                         </div>
                         
+                        <!-- YouTube URL Input -->
+                        <div class="input-group mb-3">
+                            <span class="input-group-text" id="youtube-addon">
+                                <i class="fab fa-youtube"></i>
+                            </span>
+                            <input type="text" class="form-control" id="youtube-url" 
+                                   placeholder="Or enter YouTube URL and click transcribe" 
+                                   aria-label="YouTube URL" aria-describedby="youtube-addon">
+                            <button class="btn btn-outline-danger" type="button" id="transcribe-youtube">
+                                <i class="fas fa-closed-captioning me-1"></i> Transcribe
+                            </button>
+                        </div>
+                        
                         <div class="alert alert-info mb-3" role="alert">
                             <i class="fas fa-info-circle me-2"></i>
-                            Start speaking and see your words appear in real-time below.
+                            Start speaking, or paste a YouTube URL and click transcribe.
                         </div>
                         
                         <div class="card">

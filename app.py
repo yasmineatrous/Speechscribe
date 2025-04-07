@@ -3,6 +3,7 @@ import logging
 from flask import Flask, render_template, request, jsonify, send_file, session
 from call_llm import generate_structured_notes
 from audio import transcribe_audio
+from youtube import get_youtube_transcript
 import io
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
@@ -276,6 +277,31 @@ def save_transcript():
     
     except Exception as e:
         logger.error(f"Error saving transcript: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/transcribe-youtube', methods=['POST'])
+def transcribe_youtube():
+    """Get and process transcript from YouTube video"""
+    try:
+        data = request.json
+        youtube_url = data.get('youtube_url', '')
+        
+        if not youtube_url:
+            return jsonify({'error': 'No YouTube URL provided'}), 400
+        
+        # Get the transcript from YouTube
+        transcript = get_youtube_transcript(youtube_url)
+        
+        if transcript.startswith('Error'):
+            return jsonify({'error': transcript}), 400
+        
+        # Store transcript in session for later use
+        session['transcript'] = transcript
+        
+        return jsonify({'transcript': transcript})
+    
+    except Exception as e:
+        logger.error(f"Error getting YouTube transcript: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
