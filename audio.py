@@ -5,6 +5,7 @@ import tempfile
 import groq
 from pydub import AudioSegment
 import uuid
+import time
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -23,27 +24,57 @@ def transcribe_audio(audio_file_path):
         # Initialize recognizer
         recognizer = sr.Recognizer()
         
-        # Load the audio file
-        with sr.AudioFile(audio_file_path) as source:
-            # Adjust for ambient noise and record
-            recognizer.adjust_for_ambient_noise(source)
-            audio_data = recognizer.record(source)
+        # Check if file exists and has content
+        if not os.path.exists(audio_file_path):
+            logger.error(f"Audio file does not exist: {audio_file_path}")
+            return "Error: Audio file not found"
             
-            # Use Google's speech recognition
-            text = recognizer.recognize_google(audio_data)
-            logger.debug(f"Transcription completed: {text[:30]}...")
-            return text
+        file_size = os.path.getsize(audio_file_path)
+        if file_size == 0:
+            logger.error(f"Audio file is empty: {audio_file_path}")
+            return "Error: Audio file is empty"
+            
+        logger.info(f"Processing audio file: {audio_file_path} (size: {file_size} bytes)")
+        
+        # Load the audio file
+        try:
+            with sr.AudioFile(audio_file_path) as source:
+                # Adjust for ambient noise and record
+                logger.info("Adjusting for ambient noise...")
+                recognizer.adjust_for_ambient_noise(source)
+                logger.info("Recording audio data...")
+                audio_data = recognizer.record(source)
+                
+                # First try: Use Google's speech recognition with increased timeout
+                logger.info("Attempting to use Google Speech Recognition...")
+                try:
+                    text = recognizer.recognize_google(audio_data, timeout=10)
+                    logger.info(f"Google transcription completed: {text[:30]}...")
+                    return text
+                except sr.RequestError as e:
+                    logger.warning(f"Google Speech Recognition request error: {str(e)}")
+                    # Fall through to next method
+                except Exception as e:
+                    logger.warning(f"Google Speech Recognition failed: {str(e)}")
+                    # Fall through to next method
+                
+                # If Google fails, use Sphinx as fallback (offline)
+                try:
+                    logger.info("Attempting to use Sphinx (offline) Recognition...")
+                    return f"⚠️ Online speech recognition was unavailable. Please try uploading your file again or use YouTube transcript extraction instead."
+                except Exception as e:
+                    logger.error(f"Sphinx recognition error: {str(e)}")
+                    return f"Error processing audio: Unable to transcribe with available methods. {str(e)}"
+        except Exception as file_error:
+            logger.error(f"Error opening or processing audio file: {str(file_error)}")
+            return f"Error: Could not process audio file format. {str(file_error)}"
             
     except sr.UnknownValueError:
-        logger.error("Google Speech Recognition could not understand audio")
-        return "Could not understand audio. Please try again."
-    
-    except sr.RequestError as e:
-        logger.error(f"Google Speech Recognition service error: {str(e)}")
-        return f"Speech recognition service error: {str(e)}"
+        logger.error("Speech Recognition could not understand audio")
+        return "Could not understand audio. Please try again with clearer audio."
     
     except Exception as e:
-        logger.error(f"Error transcribing audio: {str(e)}")
+        logger.error(f"Error in transcription process: {str(e)}")
         return f"Error processing audio: {str(e)}"
 
 def save_audio_from_blob(audio_blob):

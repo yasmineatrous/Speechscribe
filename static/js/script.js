@@ -578,7 +578,26 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.error("Error response:", xhr.status, xhr.responseText);
                     try {
                         const response = JSON.parse(xhr.responseText);
-                        showError(`Error: ${response.error || 'Failed to transcribe audio file'}`);
+                        if (xhr.status === 503) {
+                            // Special handling for service unavailable
+                            const errorModal = new bootstrap.Modal(document.getElementById('errorModal'));
+                            const errorElement = document.getElementById('error-message');
+                            errorElement.innerHTML = `
+                                <div class="alert alert-warning">
+                                    <h5><i class="fas fa-exclamation-triangle me-2"></i>Service Limitation</h5>
+                                    <p>${response.error || 'Online speech recognition is currently unavailable.'}</p>
+                                    <hr>
+                                    <p class="mb-0">Suggestions:</p>
+                                    <ul>
+                                        <li>Try the YouTube transcription tab instead</li>
+                                        <li>Use the manual text input if you have a transcript</li>
+                                    </ul>
+                                </div>
+                            `;
+                            errorModal.show();
+                        } else {
+                            showError(`Error: ${response.error || 'Failed to transcribe audio file'}`);
+                        }
                     } catch (e) {
                         showError('Error: Failed to transcribe audio file. Server returned an invalid response.');
                     }

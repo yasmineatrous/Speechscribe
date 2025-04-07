@@ -324,18 +324,34 @@ def transcribe_audio_file():
         
         # Process and transcribe the audio file
         logger.info("Starting audio transcription process...")
-        transcript = process_uploaded_audio(audio_file)
-        logger.info(f"Transcription complete: {transcript[:50]}...")
         
-        # Check if there was an error
-        if transcript.startswith('Error'):
-            logger.error(f"Error transcribing audio file: {transcript}")
-            return jsonify({'error': transcript}), 400
-        
-        # Store transcript in session for later use
-        session['transcript'] = transcript
-        
-        return jsonify({'transcript': transcript})
+        try:
+            transcript = process_uploaded_audio(audio_file)
+            logger.info(f"Transcription complete: {transcript[:50]}...")
+            
+            # Check if there was an error
+            if transcript.startswith('Error'):
+                logger.error(f"Error transcribing audio file: {transcript}")
+                return jsonify({'error': transcript}), 400
+                
+            if transcript.startswith('⚠️'):
+                # This is a special case for when online recognition fails but we still want to return a user-friendly message
+                logger.warning("Using fallback message because online services were unavailable")
+                return jsonify({'error': transcript}), 503  # Service Unavailable
+                
+            # Store transcript in session for later use
+            session['transcript'] = transcript
+            
+            return jsonify({'transcript': transcript})
+            
+        except Exception as process_error:
+            logger.error(f"Error in process_uploaded_audio: {str(process_error)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            
+            # Provide a user-friendly message
+            error_message = "Sorry, we couldn't process your audio file. This could be due to network restrictions or an unsupported audio format. Please try using YouTube transcription instead."
+            return jsonify({'error': error_message}), 500
     
     except Exception as e:
         logger.error(f"Error processing audio file: {str(e)}")
