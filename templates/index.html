@@ -113,6 +113,37 @@
                                 </div>
                             </div>
                             
+                            <!-- Upload Audio File Tab -->
+                            <div class="tab-pane fade" id="upload-content" role="tabpanel" aria-labelledby="upload-tab">
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <div class="card border-warning">
+                                            <div class="card-header bg-warning-subtle">
+                                                <i class="fas fa-file-audio me-2"></i><strong>Upload Audio File</strong>
+                                            </div>
+                                            <div class="card-body">
+                                                <p class="card-text mb-3">
+                                                    <small>Upload an audio file (MP3, WAV, M4A, OGG) from your computer to transcribe.</small>
+                                                </p>
+                                                <form id="audio-upload-form" enctype="multipart/form-data">
+                                                    <div class="mb-3">
+                                                        <label for="audio-file" class="form-label">Select Audio File</label>
+                                                        <input class="form-control" type="file" id="audio-file" accept=".mp3,.wav,.m4a,.ogg,.flac">
+                                                        <div class="form-text">Supported formats: MP3, WAV, M4A, OGG, FLAC</div>
+                                                    </div>
+                                                    <div id="upload-progress" class="progress mb-3 d-none">
+                                                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning" role="progressbar" style="width: 0%"></div>
+                                                    </div>
+                                                    <button type="button" id="transcribe-audio-file" class="btn btn-warning w-100">
+                                                        <i class="fas fa-upload me-1"></i> Upload & Transcribe
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
                             <!-- Recording Option Tab -->
                             <div class="tab-pane fade" id="recording-content" role="tabpanel" aria-labelledby="recording-tab">
                                 <div class="row">
