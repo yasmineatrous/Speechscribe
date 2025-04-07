@@ -560,10 +560,25 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     // Set the transcript
                     if (response.transcript) {
+                        console.log("Setting transcript:", response.transcript);
+                        session["transcript"] = response.transcript;
                         finalTranscript = response.transcript;
                         if (transcriptElement) {
                             transcriptElement.textContent = finalTranscript;
+                            
+                            // Make sure the tab with the transcript is active
+                            const transcriptTab = document.querySelector('button[data-bs-target="#transcript-tab"]');
+                            if (transcriptTab) {
+                                const tab = new bootstrap.Tab(transcriptTab);
+                                tab.show();
+                            }
+                            
+                            // Scroll to the transcript
+                            document.getElementById('transcript-container').scrollIntoView({ behavior: 'smooth' });
                         }
+                        
+                        // Store in session
+                        saveTranscriptToServer(finalTranscript);
                         
                         // Enable generate notes button
                         if (generateNotesBtn) {

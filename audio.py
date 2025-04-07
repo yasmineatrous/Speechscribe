@@ -67,8 +67,20 @@ def transcribe_audio(audio_file_path):
                         return "Error: No speech could be recognized in the audio"
                         
                 except Exception as groq_error:
-                    logger.error(f"Groq API error: {str(groq_error)}")
-                    return f"Error: Could not transcribe with Groq API. {str(groq_error)}"
+                    error_msg = str(groq_error)
+                    logger.error(f"Groq API error: {error_msg}")
+                    
+                    # Provide more specific error messages for common issues
+                    if "authentication" in error_msg.lower():
+                        return "Error: Authentication failed with the Groq API. Please check your API key."
+                    elif "file size" in error_msg.lower() or "too large" in error_msg.lower():
+                        return "Error: The audio file is too large for the Groq API. Try a shorter audio clip or use YouTube transcription instead."
+                    elif "timeout" in error_msg.lower() or "deadline" in error_msg.lower():
+                        return "Error: The Groq API request timed out. This might be due to a large file or network issues. Try again or use YouTube transcription."
+                    elif "format" in error_msg.lower():
+                        return "Error: The audio file format is not supported by the Groq API. Try converting to MP3 or WAV."
+                    else:
+                        return f"Error: Could not transcribe with Groq API. {error_msg}"
                     
         except Exception as file_error:
             logger.error(f"Error opening or processing audio file: {str(file_error)}")
@@ -113,11 +125,15 @@ def process_uploaded_audio(uploaded_file):
     Returns:
         str: Transcribed text from the audio file
     """
+    # Create unique filenames first
+    file_id = str(uuid.uuid4())
+    temp_input_path = None
+    wav_path = None
+    
     try:
         logger.info(f"Processing uploaded audio file: {uploaded_file.filename}")
         
-        # Create a unique filename to avoid conflicts
-        file_id = str(uuid.uuid4())
+        # Get file metadata
         original_filename = uploaded_file.filename
         file_extension = os.path.splitext(original_filename)[1].lower()
         
@@ -125,17 +141,26 @@ def process_uploaded_audio(uploaded_file):
         temp_dir = os.path.join(os.getcwd(), 'uploads')
         os.makedirs(temp_dir, exist_ok=True)
         
-        # Save the uploaded file
+        # Define file paths
         temp_input_path = os.path.join(temp_dir, f"{file_id}{file_extension}")
-        uploaded_file.save(temp_input_path)
-        
-        # Convert to WAV if not already WAV (SpeechRecognition requires WAV)
         wav_path = os.path.join(temp_dir, f"{file_id}.wav")
         
+        # Save the uploaded file directly to disk to avoid memory issues
+        logger.info(f"Saving uploaded file to: {temp_input_path}")
+        uploaded_file.save(temp_input_path)
+        file_size = os.path.getsize(temp_input_path)
+        logger.info(f"File saved successfully. Size: {file_size} bytes")
+        
+        if file_size == 0:
+            logger.error("Uploaded file is empty (0 bytes)")
+            return "Error: The uploaded file is empty. Please try again with a valid audio file."
+        
+        # Convert to WAV if needed
         if file_extension.lower() != '.wav':
             logger.info(f"Converting {file_extension} file to WAV format")
             try:
                 # Load the audio file with pydub
+                logger.debug(f"Loading audio file: {temp_input_path}")
                 if file_extension.lower() == '.mp3':
                     audio = AudioSegment.from_mp3(temp_input_path)
                 elif file_extension.lower() == '.m4a':
@@ -146,11 +171,17 @@ def process_uploaded_audio(uploaded_file):
                     # Try generic loading for other formats
                     audio = AudioSegment.from_file(temp_input_path)
                 
+                logger.debug("Audio file loaded successfully")
+                
                 # Convert to WAV format at 16kHz (good for speech recognition)
+                logger.debug("Converting audio to 16kHz")
                 audio = audio.set_frame_rate(16000)
+                
+                logger.debug(f"Exporting to WAV: {wav_path}")
                 audio.export(wav_path, format="wav")
                 
                 logger.info(f"Audio conversion successful: {wav_path}")
+                
             except Exception as e:
                 logger.error(f"Error converting audio file: {str(e)}")
                 # Clean up the original temp file
@@ -158,18 +189,39 @@ def process_uploaded_audio(uploaded_file):
                     os.remove(temp_input_path)
                 return f"Error: Could not convert audio file. {str(e)}"
         else:
-            # If already WAV, just use the original file
+            # If already WAV, just rename the original file
+            logger.info("File is already WAV format, using as-is")
             wav_path = temp_input_path
+        
+        # Add a small delay to ensure file is written to disk completely
+        time.sleep(0.5)
+        
+        # Verify the WAV file exists and has content
+        if not os.path.exists(wav_path):
+            logger.error(f"WAV file does not exist: {wav_path}")
+            return "Error: WAV file was not created successfully."
+            
+        wav_size = os.path.getsize(wav_path)
+        if wav_size == 0:
+            logger.error(f"WAV file is empty: {wav_path}")
+            return "Error: Converted WAV file is empty."
+        
+        logger.info(f"WAV file ready for transcription: {wav_path} (size: {wav_size} bytes)")
         
         # Transcribe the WAV file
         transcript = transcribe_audio(wav_path)
+        logger.info(f"Transcription received: {len(transcript)} characters")
         
-        # Clean up temporary files
+        # Clean up temporary files after successful transcription
         try:
-            if os.path.exists(temp_input_path):
+            logger.debug("Cleaning up temporary files")
+            if temp_input_path and os.path.exists(temp_input_path) and temp_input_path != wav_path:
                 os.remove(temp_input_path)
-            if wav_path != temp_input_path and os.path.exists(wav_path):
+                logger.debug(f"Removed input file: {temp_input_path}")
+                
+            if wav_path and os.path.exists(wav_path):
                 os.remove(wav_path)
+                logger.debug(f"Removed WAV file: {wav_path}")
         except Exception as e:
             logger.warning(f"Error removing temporary files: {str(e)}")
         
@@ -177,6 +229,18 @@ def process_uploaded_audio(uploaded_file):
         
     except Exception as e:
         logger.error(f"Error processing uploaded audio: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        
+        # Clean up temporary files in case of error
+        try:
+            if temp_input_path and os.path.exists(temp_input_path):
+                os.remove(temp_input_path)
+            if wav_path and wav_path != temp_input_path and os.path.exists(wav_path):
+                os.remove(wav_path)
+        except Exception as cleanup_error:
+            logger.warning(f"Error during cleanup: {str(cleanup_error)}")
+            
         return f"Error processing audio file: {str(e)}"
 
 def transcribe_youtube_audio(audio_file_path):
@@ -241,8 +305,20 @@ def transcribe_youtube_audio(audio_file_path):
                         return "Error: No speech could be recognized in the YouTube audio"
                         
                 except Exception as groq_error:
-                    logger.error(f"Groq API error for YouTube audio: {str(groq_error)}")
-                    return f"Error: Could not transcribe YouTube audio with Groq API. {str(groq_error)}"
+                    error_msg = str(groq_error)
+                    logger.error(f"Groq API error for YouTube audio: {error_msg}")
+                    
+                    # Provide more specific error messages for common issues
+                    if "authentication" in error_msg.lower():
+                        return "Error: Authentication failed with the Groq API. Please check your API key."
+                    elif "file size" in error_msg.lower() or "too large" in error_msg.lower():
+                        return "Error: The YouTube audio file is too large for the Groq API. Try a shorter video or use the YouTube transcript API instead."
+                    elif "timeout" in error_msg.lower() or "deadline" in error_msg.lower():
+                        return "Error: The Groq API request timed out. This might be due to a large file or network issues. Try again with a shorter video."
+                    elif "format" in error_msg.lower():
+                        return "Error: The YouTube audio file format is not supported by the Groq API."
+                    else:
+                        return f"Error: Could not transcribe YouTube audio with Groq API. {error_msg}"
         
         except Exception as file_error:
             logger.error(f"Error opening or processing YouTube audio file: {str(file_error)}")

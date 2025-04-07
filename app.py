@@ -14,6 +14,8 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 # Create the Flask application
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "default-secret-key")
+# Increase the maximum file upload size to 100MB (default is 16MB)
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
 
 # Configure logging
 logging.basicConfig(
