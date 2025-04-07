@@ -56,11 +56,17 @@ def transcribe_audio(audio_file_path):
                         temperature=0.0
                     )
                     
-                    # Get the transcription text
-                    transcript = transcription.text
+                    # The API can return either a string directly or an object with a text attribute
+                    # Handle both cases gracefully
+                    if hasattr(transcription, 'text'):
+                        # Case where it's a structured response object
+                        transcript = transcription.text
+                    else:
+                        # Case where it's a string directly
+                        transcript = transcription
                     
-                    if transcript and len(transcript.strip()) > 0:
-                        logger.info(f"Groq transcription completed: {transcript[:50]}...")
+                    if transcript and len(str(transcript).strip()) > 0:
+                        logger.info(f"Groq transcription completed: {str(transcript)[:50]}...")
                         return transcript
                     else:
                         logger.error("Groq returned empty transcript")
@@ -293,12 +299,18 @@ def transcribe_youtube_audio(audio_file_path):
                         temperature=0.0
                     )
                     
-                    # Get the transcription text
-                    transcript = transcription.text
+                    # The API can return either a string directly or an object with a text attribute
+                    # Handle both cases gracefully
+                    if hasattr(transcription, 'text'):
+                        # Case where it's a structured response object
+                        transcript = transcription.text
+                    else:
+                        # Case where it's a string directly
+                        transcript = transcription
                     
-                    if transcript and len(transcript.strip()) > 0:
-                        logger.info(f"Groq transcription of YouTube audio completed: {len(transcript)} characters")
-                        logger.debug(f"Transcript preview: {transcript[:100]}...")
+                    if transcript and len(str(transcript).strip()) > 0:
+                        logger.info(f"Groq transcription of YouTube audio completed: {len(str(transcript))} characters")
+                        logger.debug(f"Transcript preview: {str(transcript)[:100]}...")
                         return transcript
                     else:
                         logger.error("Groq returned empty transcript for YouTube audio")
