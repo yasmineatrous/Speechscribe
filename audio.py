@@ -49,7 +49,7 @@ def transcribe_audio(audio_file_path):
                 try:
                     transcription = groq_client.audio.transcriptions.create(
                         file=audio_file,
-                        model="distil-whisper-large-v3-en",
+                        model="whisper-large-v3",
                         prompt="",
                         response_format="text",
                         language="en",
@@ -222,7 +222,7 @@ def transcribe_youtube_audio(audio_file_path):
                     # For larger files, let the API handle it
                     transcription = groq_client.audio.transcriptions.create(
                         file=audio_file,
-                        model="distil-whisper-large-v3-en",
+                        model="whisper-large-v3",
                         prompt="",
                         response_format="text",
                         language="en",
