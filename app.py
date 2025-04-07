@@ -85,34 +85,162 @@ def download_pdf():
         buffer = io.BytesIO()
         
         # Create the PDF document
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
-        styles = getSampleStyleSheet()
-        elements = []
+        doc = SimpleDocTemplate(
+            buffer, 
+            pagesize=letter,
+            rightMargin=72,
+            leftMargin=72,
+            topMargin=72,
+            bottomMargin=72
+        )
         
-        # Add title
+        # Create custom styles
+        styles = getSampleStyleSheet()
+        
+        # Custom styles for different markdown elements
         title_style = ParagraphStyle(
             'Title',
             parent=styles['Heading1'],
-            fontSize=16,
-            spaceAfter=12
+            fontSize=18,
+            spaceAfter=16,
+            textColor=colors.HexColor('#2c3e50'),
+            alignment=1  # Center alignment
         )
-        elements.append(Paragraph("Structured Notes", title_style))
-        elements.append(Spacer(1, 12))
         
-        # Add content
-        content_style = ParagraphStyle(
-            'Content',
+        h1_style = ParagraphStyle(
+            'Heading1',
+            parent=styles['Heading1'],
+            fontSize=16,
+            spaceBefore=16,
+            spaceAfter=8,
+            textColor=colors.HexColor('#3498db'),
+            borderWidth=0,
+            borderColor=colors.HexColor('#3498db'),
+            borderPadding=5,
+            borderRadius=None,
+            allowWidows=0
+        )
+        
+        h2_style = ParagraphStyle(
+            'Heading2',
+            parent=styles['Heading2'],
+            fontSize=14,
+            spaceBefore=12,
+            spaceAfter=6,
+            textColor=colors.HexColor('#2980b9'),
+            allowWidows=0
+        )
+        
+        h3_style = ParagraphStyle(
+            'Heading3',
+            parent=styles['Heading3'],
+            fontSize=12,
+            spaceBefore=10,
+            spaceAfter=4,
+            textColor=colors.HexColor('#0d6efd'),
+            allowWidows=0
+        )
+        
+        normal_style = ParagraphStyle(
+            'Normal',
             parent=styles['Normal'],
             fontSize=10,
-            leading=14
+            leading=14,
+            spaceBefore=6,
+            spaceAfter=6,
+            allowWidows=0
         )
         
-        # Split by lines to maintain formatting
+        bullet_style = ParagraphStyle(
+            'Bullet',
+            parent=normal_style,
+            leftIndent=20,
+            firstLineIndent=-15,
+            spaceBefore=4,
+            spaceAfter=4
+        )
+        
+        blockquote_style = ParagraphStyle(
+            'Blockquote',
+            parent=normal_style,
+            leftIndent=30,
+            rightIndent=30,
+            fontStyle='italic',
+            textColor=colors.HexColor('#6c757d'),
+            spaceBefore=8,
+            spaceAfter=8,
+            borderWidth=1,
+            borderColor=colors.HexColor('#dee2e6'),
+            borderPadding=8,
+            borderRadius=6
+        )
+        
+        elements = []
+        
+        # Add title
+        elements.append(Paragraph("Structured Notes", title_style))
+        elements.append(Spacer(1, 20))
+        
+        # Process the markdown content
         lines = notes.split('\n')
-        for line in lines:
-            if line.strip():
-                elements.append(Paragraph(line, content_style))
-                elements.append(Spacer(1, 6))
+        i = 0
+        
+        while i < len(lines):
+            line = lines[i].strip()
+            
+            # Skip empty lines
+            if not line:
+                i += 1
+                continue
+            
+            # Process headings
+            if line.startswith('# '):
+                elements.append(Paragraph(line[2:], h1_style))
+            elif line.startswith('## '):
+                elements.append(Paragraph(line[3:], h2_style))
+            elif line.startswith('### '):
+                elements.append(Paragraph(line[4:], h3_style))
+            
+            # Process blockquotes
+            elif line.startswith('> '):
+                blockquote_text = line[2:]
+                elements.append(Paragraph(blockquote_text, blockquote_style))
+            
+            # Process bullet points
+            elif line.startswith('- ') or line.startswith('* '):
+                bullet_text = f"• {line[2:]}"
+                elements.append(Paragraph(bullet_text, bullet_style))
+            
+            # Process numbered lists
+            elif line.strip() and line[0].isdigit() and '. ' in line:
+                num, text = line.split('. ', 1)
+                num_text = f"{num}. {text}"
+                elements.append(Paragraph(num_text, bullet_style))
+            
+            # Process regular paragraphs
+            else:
+                # Handle bold text with ** or __
+                processed_line = line
+                processed_line = processed_line.replace('**', '<b>', 1)
+                if '**' in processed_line:
+                    processed_line = processed_line.replace('**', '</b>', 1)
+                
+                processed_line = processed_line.replace('__', '<b>', 1)
+                if '__' in processed_line:
+                    processed_line = processed_line.replace('__', '</b>', 1)
+                
+                # Handle italic text with * or _
+                processed_line = processed_line.replace('*', '<i>', 1)
+                if '*' in processed_line:
+                    processed_line = processed_line.replace('*', '</i>', 1)
+                
+                processed_line = processed_line.replace('_', '<i>', 1)
+                if '_' in processed_line:
+                    processed_line = processed_line.replace('_', '</i>', 1)
+                
+                elements.append(Paragraph(processed_line, normal_style))
+            
+            i += 1
         
         # Build the PDF
         doc.build(elements)

@@ -167,6 +167,24 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    // Function to render Markdown content safely
+    function renderMarkdown(markdownText) {
+        // Convert markdown to HTML using marked.js
+        const rawHtml = marked.parse(markdownText);
+        
+        // Sanitize the HTML using DOMPurify
+        const sanitizedHtml = DOMPurify.sanitize(rawHtml, {
+            ADD_ATTR: ['target'],
+            ALLOWED_TAGS: [
+                'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'p', 'a', 'ul', 'ol', 
+                'nl', 'li', 'b', 'i', 'strong', 'em', 'strike', 'code', 'hr', 'br', 'div', 
+                'table', 'thead', 'caption', 'tbody', 'tr', 'th', 'td', 'pre', 'span'
+            ],
+        });
+        
+        return sanitizedHtml;
+    }
+    
     // Generate notes from transcript
     function generateNotes() {
         if (finalTranscript.trim() === '') {
@@ -177,7 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Show loading state
         notesLoading.classList.remove('d-none');
         generateNotesBtn.disabled = true;
-        structuredNotesElement.textContent = 'Generating...';
+        structuredNotesElement.innerHTML = '<em>Generating...</em>';
         
         // Call API to generate notes
         fetch('/generate-notes', {
@@ -195,9 +213,10 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (data.error) {
                 showError(data.error);
-                structuredNotesElement.textContent = 'Error generating notes. Please try again.';
+                structuredNotesElement.innerHTML = '<em>Error generating notes. Please try again.</em>';
             } else {
-                structuredNotesElement.textContent = data.notes;
+                // Render markdown content
+                structuredNotesElement.innerHTML = renderMarkdown(data.notes);
                 downloadPDFBtn.disabled = false;
             }
         })
@@ -208,7 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             console.error('Error generating notes:', error);
             showError(`Error generating notes: ${error.message}`);
-            structuredNotesElement.textContent = 'Error generating notes. Please try again.';
+            structuredNotesElement.innerHTML = '<em>Error generating notes. Please try again.</em>';
         });
     }
     
@@ -219,7 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateTranscriptDisplay();
         generateNotesBtn.disabled = true;
         downloadPDFBtn.disabled = true;
-        structuredNotesElement.textContent = 'Generated notes will appear here...';
+        structuredNotesElement.innerHTML = '<em>Generated notes will appear here...</em>';
     }
     
     // Download PDF function
