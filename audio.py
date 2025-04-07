@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 def transcribe_audio(audio_file_path):
     """
-    Transcribe audio file to text using speech recognition
+    Transcribe audio file to text using Groq's Whisper API
     
     Args:
         audio_file_path (str): Path to the audio file
@@ -21,9 +21,6 @@ def transcribe_audio(audio_file_path):
         str: Transcribed text
     """
     try:
-        # Initialize recognizer
-        recognizer = sr.Recognizer()
-        
         # Check if file exists and has content
         if not os.path.exists(audio_file_path):
             logger.error(f"Audio file does not exist: {audio_file_path}")
@@ -34,45 +31,49 @@ def transcribe_audio(audio_file_path):
             logger.error(f"Audio file is empty: {audio_file_path}")
             return "Error: Audio file is empty"
             
-        logger.info(f"Processing audio file: {audio_file_path} (size: {file_size} bytes)")
+        logger.info(f"Processing audio file with Groq API: {audio_file_path} (size: {file_size} bytes)")
         
-        # Load the audio file
+        # Initialize Groq client
+        groq_api_key = os.environ.get("GROQ_API_KEY")
+        if not groq_api_key:
+            logger.error("GROQ_API_KEY environment variable not found")
+            return "Error: Groq API key not configured"
+            
+        groq_client = groq.Groq(api_key=groq_api_key)
+        
+        # Open the audio file and send to Groq's Whisper API
         try:
-            with sr.AudioFile(audio_file_path) as source:
-                # Adjust for ambient noise and record
-                logger.info("Adjusting for ambient noise...")
-                recognizer.adjust_for_ambient_noise(source)
-                logger.info("Recording audio data...")
-                audio_data = recognizer.record(source)
+            with open(audio_file_path, "rb") as audio_file:
+                logger.info("Sending audio file to Groq's Whisper API...")
                 
-                # First try: Use Google's speech recognition with increased timeout
-                logger.info("Attempting to use Google Speech Recognition...")
                 try:
-                    text = recognizer.recognize_google(audio_data, timeout=10)
-                    logger.info(f"Google transcription completed: {text[:30]}...")
-                    return text
-                except sr.RequestError as e:
-                    logger.warning(f"Google Speech Recognition request error: {str(e)}")
-                    # Fall through to next method
-                except Exception as e:
-                    logger.warning(f"Google Speech Recognition failed: {str(e)}")
-                    # Fall through to next method
-                
-                # If Google fails, use Sphinx as fallback (offline)
-                try:
-                    logger.info("Attempting to use Sphinx (offline) Recognition...")
-                    return f"⚠️ Online speech recognition was unavailable. Please try uploading your file again or use YouTube transcript extraction instead."
-                except Exception as e:
-                    logger.error(f"Sphinx recognition error: {str(e)}")
-                    return f"Error processing audio: Unable to transcribe with available methods. {str(e)}"
+                    transcription = groq_client.audio.transcriptions.create(
+                        file=audio_file,
+                        model="distil-whisper-large-v3-en",
+                        prompt="",
+                        response_format="text",
+                        language="en",
+                        temperature=0.0
+                    )
+                    
+                    # Get the transcription text
+                    transcript = transcription.text
+                    
+                    if transcript and len(transcript.strip()) > 0:
+                        logger.info(f"Groq transcription completed: {transcript[:50]}...")
+                        return transcript
+                    else:
+                        logger.error("Groq returned empty transcript")
+                        return "Error: No speech could be recognized in the audio"
+                        
+                except Exception as groq_error:
+                    logger.error(f"Groq API error: {str(groq_error)}")
+                    return f"Error: Could not transcribe with Groq API. {str(groq_error)}"
+                    
         except Exception as file_error:
             logger.error(f"Error opening or processing audio file: {str(file_error)}")
             return f"Error: Could not process audio file format. {str(file_error)}"
             
-    except sr.UnknownValueError:
-        logger.error("Speech Recognition could not understand audio")
-        return "Could not understand audio. Please try again with clearer audio."
-    
     except Exception as e:
         logger.error(f"Error in transcription process: {str(e)}")
         return f"Error processing audio: {str(e)}"
@@ -180,7 +181,7 @@ def process_uploaded_audio(uploaded_file):
 
 def transcribe_youtube_audio(audio_file_path):
     """
-    Transcribe YouTube audio file
+    Transcribe YouTube audio file using Groq's Whisper API
     
     Args:
         audio_file_path (str): Path to the downloaded audio file
@@ -189,9 +190,9 @@ def transcribe_youtube_audio(audio_file_path):
         str: Transcribed text
     """
     try:
-        logger.info(f"Transcribing YouTube audio from: {audio_file_path}")
+        logger.info(f"Transcribing YouTube audio with Groq API from: {audio_file_path}")
         
-        # First check if the file exists
+        # First check if file exists and has content
         if not os.path.exists(audio_file_path):
             logger.error(f"Audio file not found at: {audio_file_path}")
             return "Error: Audio file not found. Download may have failed."
@@ -204,132 +205,49 @@ def transcribe_youtube_audio(audio_file_path):
             logger.error("Audio file is empty (0 bytes)")
             return "Error: Downloaded audio file is empty."
         
-        # Initialize the speech recognizer
+        # Initialize Groq client
+        groq_api_key = os.environ.get("GROQ_API_KEY")
+        if not groq_api_key:
+            logger.error("GROQ_API_KEY environment variable not found")
+            return "Error: Groq API key not configured"
+        
+        groq_client = groq.Groq(api_key=groq_api_key)
+        
+        # Open the audio file and send to Groq's Whisper API
         try:
-            recognizer = sr.Recognizer()
-            
-            # Load the audio file
-            logger.info("Loading audio file into speech recognizer")
-            
-            # For longer files, we'll split the audio into chunks
-            with sr.AudioFile(audio_file_path) as source:
-                # Adjust recognition parameters for better results
-                recognizer.energy_threshold = 300  # Increased from default for better noise handling
-                recognizer.dynamic_energy_threshold = True  # Adapts to ambient noise
-                recognizer.pause_threshold = 0.8  # Shorter pause detection for more accurate transcription
+            with open(audio_file_path, "rb") as audio_file:
+                logger.info("Sending YouTube audio file to Groq's Whisper API...")
                 
-                # For longer files, we'll process in chunks
-                if file_size > 10 * 1024 * 1024:  # If more than 10MB
-                    logger.info("Large audio file detected, processing in chunks")
+                try:
+                    # For larger files, let the API handle it
+                    transcription = groq_client.audio.transcriptions.create(
+                        file=audio_file,
+                        model="distil-whisper-large-v3-en",
+                        prompt="",
+                        response_format="text",
+                        language="en",
+                        temperature=0.0
+                    )
                     
-                    # Get audio duration from the file
-                    audio_duration = source.DURATION
+                    # Get the transcription text
+                    transcript = transcription.text
                     
-                    # If audio_duration is not available, estimate it based on file size
-                    if not audio_duration:
-                        # Rough estimate: 1MB ≈ 1 minute of audio at typical bit rates
-                        audio_duration = (file_size / (1024 * 1024)) * 60
-                    
-                    logger.info(f"Estimated audio duration: {audio_duration} seconds")
-                    
-                    # Process in chunks of 30 seconds with 2-second overlap
-                    chunk_duration = 30  # seconds
-                    overlap = 2  # seconds
-                    
-                    # Calculate the number of chunks
-                    num_chunks = int(audio_duration / (chunk_duration - overlap)) + 1
-                    
-                    # Initialize transcript list
-                    transcript_chunks = []
-                    
-                    # Process each chunk
-                    for i in range(num_chunks):
-                        start_time = max(0, i * (chunk_duration - overlap))
-                        end_time = min(audio_duration, start_time + chunk_duration)
+                    if transcript and len(transcript.strip()) > 0:
+                        logger.info(f"Groq transcription of YouTube audio completed: {len(transcript)} characters")
+                        logger.debug(f"Transcript preview: {transcript[:100]}...")
+                        return transcript
+                    else:
+                        logger.error("Groq returned empty transcript for YouTube audio")
+                        return "Error: No speech could be recognized in the YouTube audio"
                         
-                        if end_time <= start_time:
-                            break
-                        
-                        logger.info(f"Processing chunk {i+1}/{num_chunks} ({start_time}-{end_time}s)")
-                        
-                        # Adjust the recognizer to the current position
-                        source.rewind()  # Rewind to beginning
-                        source.stream.read(int(start_time * source.SAMPLE_RATE * source.SAMPLE_WIDTH))  # Skip to start_time
-                        
-                        # Record chunk
-                        chunk_audio = recognizer.record(source, duration=end_time-start_time)
-                        
-                        try:
-                            # Try with multiple language options for better results
-                            languages = ['en-US', 'en-GB', 'en-AU']  # Different English variants
-                            success = False
-                            
-                            for language in languages:
-                                try:
-                                    # Use Google's speech recognition service with specific language
-                                    logger.info(f"Trying language: {language} for chunk {i+1}")
-                                    chunk_text = recognizer.recognize_google(chunk_audio, language=language)
-                                    transcript_chunks.append(chunk_text)
-                                    success = True
-                                    break  # Stop trying languages if one works
-                                except sr.UnknownValueError:
-                                    continue  # Try the next language
-                                except sr.RequestError:
-                                    break  # Network error, don't try more languages
-                            
-                            if not success:
-                                logger.warning(f"Could not understand audio in chunk {i+1} with any language")
-                                # Add a placeholder for empty chunks to maintain timing
-                                transcript_chunks.append("")
-                                
-                        except sr.RequestError as e:
-                            logger.error(f"Google Speech Recognition service error in chunk {i+1}: {str(e)}")
-                            # Continue with next chunk on error
-                    
-                    # Combine all chunks
-                    transcript = " ".join(transcript_chunks)
-                else:
-                    # For smaller files, process the entire file at once
-                    logger.info("Processing audio file in one go")
-                    audio_data = recognizer.record(source)
-                    
-                    # Try with multiple language options for better results
-                    languages = ['en-US', 'en-GB', 'en-AU']  # Different English variants
-                    transcript = None
-                    
-                    for language in languages:
-                        try:
-                            # Use Google's speech recognition service with specific language
-                            logger.info(f"Trying language: {language} for full audio")
-                            transcript = recognizer.recognize_google(audio_data, language=language)
-                            if transcript and transcript.strip():
-                                break  # Stop trying languages if one works
-                        except sr.UnknownValueError:
-                            continue  # Try the next language
-                        except sr.RequestError as e:
-                            logger.error(f"Google Speech Recognition service error: {str(e)}")
-                            raise e  # Re-raise to be caught by outer exception handler
-                    
-                    # If all languages failed, set empty transcript to trigger error below
-                    if not transcript:
-                        transcript = ""
-                
-                # Check if we got a valid transcript
-                if not transcript or transcript.strip() == "":
-                    logger.warning("Speech recognition returned empty result")
-                    return "Error: No speech could be recognized in the audio."
-                
-                logger.info(f"Transcription successful, got {len(transcript)} characters")
-                return transcript
+                except Exception as groq_error:
+                    logger.error(f"Groq API error for YouTube audio: {str(groq_error)}")
+                    return f"Error: Could not transcribe YouTube audio with Groq API. {str(groq_error)}"
         
-        except sr.UnknownValueError:
-            logger.error("Google Speech Recognition could not understand audio")
-            return "Error: Could not understand audio. The speech might be unclear or in an unsupported language."
+        except Exception as file_error:
+            logger.error(f"Error opening or processing YouTube audio file: {str(file_error)}")
+            return f"Error: Could not process YouTube audio file. {str(file_error)}"
             
-        except sr.RequestError as e:
-            logger.error(f"Google Speech Recognition service error: {str(e)}")
-            return f"Error: Could not request results from speech recognition service. {str(e)}"
-        
     except Exception as e:
         logger.error(f"Error transcribing YouTube audio: {str(e)}")
         return f"Error processing YouTube audio: {str(e)}"
