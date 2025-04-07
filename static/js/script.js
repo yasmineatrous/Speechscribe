@@ -407,16 +407,29 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
+        // Create FormData and append file
         // Show progress and disable button
         audioUploadProgress.classList.remove('d-none');
         uploadAudioBtn.disabled = true;
         
         // Clear previous transcript
         finalTranscript = '';
-        transcriptElement.textContent = '';
-        structuredNotesElement.innerHTML = '';
         
-        // Create FormData and append file
+        // Show detailed loading indicator in the transcript area
+        transcriptElement.innerHTML = `
+            <div class="text-center my-5">
+                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <h5 class="mt-3">Processing audio file...</h5>
+                <p class="text-muted">Converting and transcribing the audio. This may take a moment.</p>
+                <div class="progress mt-3" style="height: 10px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+                </div>
+            </div>
+        `;
+        
+        structuredNotesElement.innerHTML = '';
         const formData = new FormData();
         formData.append('audio_file', file);
         
