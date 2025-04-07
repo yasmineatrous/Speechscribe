@@ -24,9 +24,9 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 # Constants
-MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB
-FILE_TOO_LARGE_MESSAGE = "The audio file is too large for the current size limits."
-MAX_RETRIES = 3
+MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 MB (increased from 100 MB)
+FILE_TOO_LARGE_MESSAGE = "The audio file is too large (over 500 MB). Try a shorter video."
+MAX_RETRIES = 4  # Increased from 3
 RETRY_DELAY = 2
 
 # Create downloads directory if it doesn't exist
@@ -57,17 +57,23 @@ def get_ydl_opts(external_logger=None):
     Get options for youtube-dl
     """
     return {
-        "format": "bestaudio/best",
+        # Prioritize audio-only formats with lower quality for faster downloads
+        "format": "worstaudio/worst[filesize<50M]/bestaudio/best",
         "postprocessors": [
             {
                 "key": "FFmpegExtractAudio",
                 "preferredcodec": "mp3",
-                "preferredquality": "192",  # Set quality to 192kbps
+                "preferredquality": "128",  # Reduced quality from 192kbps to 128kbps
             }
         ],
         "logger": MyLogger(external_logger),
         "outtmpl": "./downloads/audio/%(title)s.%(ext)s",  # Set output filename
         "progress_hooks": [progress_hook],
+        "noplaylist": True,  # Only download the video, not the entire playlist
+        "quiet": False,
+        "no_warnings": False,
+        # Adding some timeouts to prevent hanging on large videos
+        "socket_timeout": 30,  # 30 seconds
     }
 
 def download_video_audio(url, external_logger=None):

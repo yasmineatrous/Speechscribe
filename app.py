@@ -298,27 +298,45 @@ def transcribe_youtube():
         if not youtube_url:
             return jsonify({'error': 'No YouTube URL provided'}), 400
         
-        # Try direct download and transcription first
-        logger.info(f"Attempting to download and transcribe YouTube video: {youtube_url}")
+        # Validate the URL format
+        if not youtube_url.startswith(('https://www.youtube.com/', 'https://youtu.be/', 'https://youtube.com/')):
+            return jsonify({'error': 'Invalid YouTube URL. Please provide a valid YouTube URL starting with https://www.youtube.com/ or https://youtu.be/'}), 400
+            
+        # Step 1: First check if we can get a quick response from YouTube API
+        try:
+            logger.info(f"Attempting to fetch transcript via YouTube API for: {youtube_url}")
+            transcript = get_youtube_transcript(youtube_url)
+            
+            # If YouTube API worked, use it right away (fastest method)
+            if not transcript.startswith('Error'):
+                logger.info("YouTube API successfully retrieved transcript")
+                session['transcript'] = transcript
+                return jsonify({'transcript': transcript})
+                
+            logger.info(f"YouTube API failed: {transcript}")
+        except Exception as youtube_api_error:
+            logger.info(f"YouTube API error: {str(youtube_api_error)}")
+        
+        # Step 2: Try direct download and transcription
+        logger.info(f"Starting download and transcription process for: {youtube_url}")
+        
+        # Send an initial response to let the user know processing has started
+        # Using an intermediate status helps with longer videos
+        processing_message = "Processing your YouTube video. For longer videos (>10 min), this may take a few moments..."
+        
+        # Return the actual transcript
         transcript = download_and_transcribe_youtube(youtube_url)
         
-        # If download and transcribe fails, try the original methods as fallbacks
+        # If download and transcribe fails, use Groq API as final fallback
         if transcript.startswith('Error'):
-            logger.info(f"Download method failed, trying YouTube API for: {youtube_url}")
+            logger.info(f"Download method failed: {transcript}")
+            logger.info(f"Using Groq API as final fallback for: {youtube_url}")
             
             try:
-                # Try the YouTube API method
-                transcript = get_youtube_transcript(youtube_url)
-                
-                # If YouTube API fails, use Groq API as final fallback
-                if transcript.startswith('Error'):
-                    logger.info(f"YouTube API failed, using Groq API fallback for: {youtube_url}")
-                    transcript = extract_youtube_transcript(youtube_url)
-                
-            except Exception as youtube_error:
-                # If the YouTube API method fails completely, use Groq as fallback
-                logger.info(f"YouTube API error: {str(youtube_error)}, using Groq API fallback")
                 transcript = extract_youtube_transcript(youtube_url)
+            except Exception as groq_error:
+                logger.error(f"Groq API fallback error: {str(groq_error)}")
+                return jsonify({'error': f"Failed to transcribe video. {str(groq_error)}"}), 500
         
         # Check if we still have an error after all attempts
         if transcript.startswith('Error'):
@@ -328,11 +346,12 @@ def transcribe_youtube():
         # Store transcript in session for later use
         session['transcript'] = transcript
         
+        # Return the successful transcript
         return jsonify({'transcript': transcript})
     
     except Exception as e:
         logger.error(f"Error getting YouTube transcript: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': f"Failed to process YouTube video: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

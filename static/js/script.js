@@ -190,6 +190,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // YouTube transcript function
+            }
+    // YouTube transcript function
     function getYoutubeTranscript() {
         const youtubeUrl = youtubeUrlInput.value.trim();
         
@@ -198,10 +200,41 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
+        // Validate URL format
+        if (!youtubeUrl.startsWith('https://www.youtube.com/') && 
+            !youtubeUrl.startsWith('https://youtu.be/') &&
+            !youtubeUrl.startsWith('https://youtube.com/')) {
+            showError('Please enter a valid YouTube URL starting with https://www.youtube.com/ or https://youtu.be/');
+            return;
+        }
+        
         // Disable buttons and show loading
         transcribeYoutubeBtn.disabled = true;
-        transcriptElement.textContent = 'Loading transcript from YouTube...';
         finalTranscript = '';
+        
+        // Show detailed loading message
+        const loadingMsg = document.createElement('div');
+        loadingMsg.classList.add('text-center', 'mb-4');
+        loadingMsg.innerHTML = `
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Extracting transcript from YouTube...</p>
+            <p class="small text-muted">This may take several moments for longer videos.</p>
+            <div class="progress mt-3">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+            </div>
+        `;
+        transcriptElement.innerHTML = '';
+        transcriptElement.appendChild(loadingMsg);
+        
+        // Set a timeout to update the message for longer videos
+        const longVideoTimeout = setTimeout(() => {
+            const statusMessage = loadingMsg.querySelector('p:not(.small)');
+            if (statusMessage) {
+                statusMessage.innerHTML = 'Still working... <br>Downloading and processing video audio. <br>For videos longer than 10 minutes, this may take a minute or two.';
+            }
+        }, 5000);
         
         // Call API to get YouTube transcript
         fetch('/transcribe-youtube', {
@@ -211,7 +244,10 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             body: JSON.stringify({ youtube_url: youtubeUrl }),
         })
-        .then(response => response.json())
+        .then(response => {
+            clearTimeout(longVideoTimeout);
+            return response.json();
+        })
         .then(data => {
             transcribeYoutubeBtn.disabled = false;
             
@@ -222,9 +258,71 @@ document.addEventListener('DOMContentLoaded', () => {
                 finalTranscript = data.transcript;
                 transcriptElement.textContent = finalTranscript;
                 generateNotesBtn.disabled = false;
+                
+                // Add success notification
+                const successAlert = document.createElement('div');
+                successAlert.classList.add('alert', 'alert-success', 'mb-3', 'animate__animated', 'animate__fadeIn');
+                successAlert.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Transcript successfully extracted!';
+                
+                // Insert before the transcript
+                transcriptElement.parentNode.insertBefore(successAlert, transcriptElement);
+                
+                // Remove after 3 seconds
+                setTimeout(() => {
+                    successAlert.classList.add('animate__fadeOut');
+                    setTimeout(() => successAlert.remove(), 500);
+                }, 3000);
             }
         })
         .catch(error => {
+            clearTimeout(longVideoTimeout);
+            transcribeYoutubeBtn.disabled = false;
+            console.error('Error getting YouTube transcript:', error);
+            showError(`Error getting YouTube transcript: ${error.message}`);
+            transcriptElement.textContent = 'Error loading transcript. Please try again.';
+        });
+        }, 5000);
+        
+        // Call API to get YouTube transcript
+        fetch('/transcribe-youtube', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ youtube_url: youtubeUrl }),
+        })
+        .then(response => {
+            clearTimeout(longVideoTimeout);
+            return response.json();
+        })
+        .then(data => {
+            transcribeYoutubeBtn.disabled = false;
+            
+            if (data.error) {
+                showError(data.error);
+                transcriptElement.textContent = 'Error loading transcript. Please try again.';
+            } else {
+                finalTranscript = data.transcript;
+                transcriptElement.textContent = finalTranscript;
+                generateNotesBtn.disabled = false;
+                
+                // Add success notification
+                const successAlert = document.createElement('div');
+                successAlert.classList.add('alert', 'alert-success', 'mb-3', 'animate__animated', 'animate__fadeIn');
+                successAlert.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Transcript successfully extracted!';
+                
+                // Insert before the transcript
+                transcriptElement.parentNode.insertBefore(successAlert, transcriptElement);
+                
+                // Remove after 3 seconds
+                setTimeout(() => {
+                    successAlert.classList.add('animate__fadeOut');
+                    setTimeout(() => successAlert.remove(), 500);
+                }, 3000);
+            }
+        })
+        .catch(error => {
+            clearTimeout(longVideoTimeout);
             transcribeYoutubeBtn.disabled = false;
             console.error('Error getting YouTube transcript:', error);
             showError(`Error getting YouTube transcript: ${error.message}`);
