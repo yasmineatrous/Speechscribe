@@ -438,7 +438,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Create form data
         const formData = new FormData();
-        formData.append('audio', file);
+        formData.append('audio_file', file);
         
         // Send audio file to server for transcription
         fetch('/transcribe-audio-file', {
