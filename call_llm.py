@@ -1,6 +1,8 @@
 import os
 import groq
 import logging
+import trafilatura
+import requests
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -80,3 +82,79 @@ def generate_structured_notes(transcript):
     except Exception as e:
         logger.error(f"Error calling Groq API: {str(e)}")
         return f"Error generating structured notes: {str(e)}"
+
+def extract_youtube_transcript(youtube_url):
+    """
+    Extract a transcript from a YouTube video URL using Groq AI
+    
+    Args:
+        youtube_url (str): The YouTube video URL
+        
+    Returns:
+        str: The extracted transcript
+    """
+    try:
+        # Get Groq API key from environment
+        api_key = os.environ.get("GROQ_API_KEY")
+        
+        if not api_key:
+            logger.error("GROQ_API_KEY not found in environment variables")
+            return "Error: GROQ API key not configured. Please set the GROQ_API_KEY environment variable."
+        
+        # Initialize Groq client
+        client = groq.Client(api_key=api_key)
+        
+        # First, get the general video content using trafilatura
+        try:
+            downloaded = trafilatura.fetch_url(youtube_url)
+            video_content = trafilatura.extract(downloaded)
+        except Exception as e:
+            logger.error(f"Error fetching YouTube page: {str(e)}")
+            video_content = "Could not fetch video content for context."
+        
+        # Prepare the prompt for transcript extraction
+        prompt = f"""
+        I need you to extract the transcript or summarize the content from a YouTube video.
+        
+        The video URL is: {youtube_url}
+        
+        Here's some context about the video that might help:
+        {video_content}
+        
+        Please provide a detailed transcript of the video's content following these rules:
+        1. Focus on the spoken words, presentations, and important dialogue
+        2. Organize it as a continuous transcript
+        3. Include all significant information and key points
+        4. Preserve the natural flow of the speech or presentation
+        5. Format it as plain text in paragraph form
+        6. Exclude timestamps, video descriptions, and metadata
+        7. If you cannot access the exact transcript, provide a comprehensive summarization based on the context
+
+        If you absolutely cannot access the video content, please acknowledge this limitation.
+        """
+        
+        # Call Groq API for transcript extraction
+        chat_completion = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
+            model="llama3-70b-8192",
+            temperature=0.2,
+            max_tokens=4096,
+        )
+        
+        # Extract and return the transcript
+        transcript = chat_completion.choices[0].message.content
+        
+        # Check if the result indicates failure
+        if "cannot access" in transcript.lower() and "video" in transcript.lower():
+            return f"Error: Could not extract transcript from YouTube video. The video might be unavailable or have no captions."
+        
+        return transcript
+    
+    except Exception as e:
+        logger.error(f"Error extracting YouTube transcript with Groq: {str(e)}")
+        return f"Error extracting YouTube transcript: {str(e)}"

@@ -14,6 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const notesLoading = document.getElementById('notes-loading');
     const youtubeUrlInput = document.getElementById('youtube-url');
     const transcribeYoutubeBtn = document.getElementById('transcribe-youtube');
+    const manualTranscriptInput = document.getElementById('manual-transcript');
+    const useManualTranscriptBtn = document.getElementById('use-manual-transcript');
     
     // Global variables
     let recognition = null;
