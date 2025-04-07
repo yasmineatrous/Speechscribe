@@ -12,8 +12,7 @@ logger = logging.getLogger(__name__)
 
 def transcribe_audio(audio_file_path):
     """
-    Transcribe audio file to text using OpenAI's Whisper model
-    via the Youtube API
+    Transcribe audio file to text using Groq's Whisper API
     
     Args:
         audio_file_path (str): Path to the audio file
@@ -32,43 +31,45 @@ def transcribe_audio(audio_file_path):
             logger.error(f"Audio file is empty: {audio_file_path}")
             return "Error: Audio file is empty"
             
-        logger.info(f"Processing audio file: {audio_file_path} (size: {file_size} bytes)")
+        logger.info(f"Processing audio file with Groq API: {audio_file_path} (size: {file_size} bytes)")
         
-        # Since we have issues with the direct Groq Audio API, let's use a fallback method
-        # by using the YouTube transcription approach which is working well
+        # Initialize Groq client
+        groq_api_key = os.environ.get("GROQ_API_KEY")
+        if not groq_api_key:
+            logger.error("GROQ_API_KEY environment variable not found")
+            return "Error: Groq API key not configured"
+            
+        groq_client = groq.Groq(api_key=groq_api_key)
         
-        # Initialize recognizer
-        recognizer = sr.Recognizer()
-        
-        # Load the audio file
+        # Open the audio file and send to Groq's Whisper API
         try:
-            with sr.AudioFile(audio_file_path) as source:
-                # Adjust for ambient noise and record
-                logger.info("Adjusting for ambient noise...")
-                recognizer.adjust_for_ambient_noise(source)
-                logger.info("Recording audio data...")
-                audio_data = recognizer.record(source)
+            with open(audio_file_path, "rb") as audio_file:
+                logger.info("Sending audio file to Groq's Whisper API...")
                 
                 try:
-                    # Use Google's speech recognition service
-                    logger.info("Attempting to use Google Speech Recognition...")
-                    text = recognizer.recognize_google(audio_data, language="en-US")
+                    transcription = groq_client.audio.transcriptions.create(
+                        file=audio_file,
+                        model="whisper-large-v3",
+                        prompt="",
+                        response_format="text",
+                        language="en",
+                        temperature=0.0
+                    )
                     
-                    if text and len(text.strip()) > 0:
-                        logger.info(f"Google transcription completed: {text[:50]}...")
-                        return text
+                    # Get the transcription text
+                    transcript = transcription.text
+                    
+                    if transcript and len(transcript.strip()) > 0:
+                        logger.info(f"Groq transcription completed: {transcript[:50]}...")
+                        return transcript
                     else:
-                        logger.warning("Speech recognition returned empty result")
-                        return "Error: No speech could be recognized in the audio."
+                        logger.error("Groq returned empty transcript")
+                        return "Error: No speech could be recognized in the audio"
                         
-                except sr.UnknownValueError:
-                    logger.error("Speech Recognition could not understand audio")
-                    return "Could not understand audio. Please try again with clearer audio."
+                except Exception as groq_error:
+                    logger.error(f"Groq API error: {str(groq_error)}")
+                    return f"Error: Could not transcribe with Groq API. {str(groq_error)}"
                     
-                except sr.RequestError as e:
-                    logger.error(f"Speech Recognition service error: {str(e)}")
-                    return f"Error: Could not request results from speech recognition service. Please try using the YouTube transcription instead."
-                
         except Exception as file_error:
             logger.error(f"Error opening or processing audio file: {str(file_error)}")
             return f"Error: Could not process audio file format. {str(file_error)}"
