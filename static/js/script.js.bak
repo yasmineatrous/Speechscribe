@@ -379,12 +379,6 @@ document.addEventListener('DOMContentLoaded', () => {
             showError('Please enter a transcript before proceeding.');
             return;
         }
-        
-        finalTranscript = transcript;
-        transcriptElement.textContent = finalTranscript;
-        generateNotesBtn.disabled = false;
-        saveTranscriptToServer(finalTranscript);
-    }
 
     // Function to upload and process audio file
     function uploadAndProcessAudio() {
@@ -409,10 +403,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // Check file size (limit to 100MB)
         const maxSize = 100 * 1024 * 1024; // 100MB in bytes
         if (file.size > maxSize) {
-            showError(`File is too large. Maximum file size is 100MB.`);
+            showError('File size exceeds the limit of 100MB. Please select a smaller file.');
             return;
         }
         
+        // Create FormData and append file
         // Show progress and disable button
         audioUploadProgress.classList.remove('d-none');
         uploadAudioBtn.disabled = true;
@@ -435,18 +430,17 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         
         structuredNotesElement.innerHTML = '';
-        
-        // Create form data
         const formData = new FormData();
-        formData.append('audio', file);
+        formData.append('audio_file', file);
         
-        // Send audio file to server for transcription
+        // Send to server
         fetch('/transcribe-audio-file', {
             method: 'POST',
             body: formData
         })
         .then(response => response.json())
         .then(data => {
+            // Hide progress and enable button
             audioUploadProgress.classList.add('d-none');
             uploadAudioBtn.disabled = false;
             
@@ -459,13 +453,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Show success notification
                 const successAlert = document.createElement('div');
                 successAlert.className = "alert alert-success mb-3";
-                successAlert.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Audio successfully transcribed!';
+                successAlert.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Audio file successfully transcribed!';
                 
-                // Insert before transcript
+                // Insert success notification
                 transcriptElement.innerHTML = '';
                 transcriptElement.parentNode.insertBefore(successAlert, transcriptElement);
                 
-                // Set transcript and enable generate button
+                // Set transcript text
                 transcriptElement.textContent = finalTranscript;
                 generateNotesBtn.disabled = false;
                 
@@ -482,6 +476,12 @@ document.addEventListener('DOMContentLoaded', () => {
             showError(`Error processing audio file: ${error.message}`);
             transcriptElement.textContent = 'Error processing audio file. Please try again.';
         });
+    }
+        
+        finalTranscript = transcript;
+        transcriptElement.textContent = finalTranscript;
+        generateNotesBtn.disabled = false;
+        saveTranscriptToServer(finalTranscript);
     }
     
     // Event listeners
