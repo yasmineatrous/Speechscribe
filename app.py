@@ -347,10 +347,17 @@ def transcribe_audio_file():
                 logger.warning("Using fallback message because online services were unavailable")
                 return jsonify({'error': transcript}), 503  # Service Unavailable
                 
-            # Store transcript in session for later use
-            session['transcript'] = transcript
+            # Add any processing notes to the transcript (e.g., for partial video processing)
+            final_transcript = transcript
+            if 'processing_note' in session:
+                processing_note = session.pop('processing_note')  # Get and remove the note
+                final_transcript = f"{processing_note}\n\n{transcript}"
+                logger.info(f"Added processing note to transcript: {processing_note}")
             
-            return jsonify({'transcript': transcript})
+            # Store transcript in session for later use
+            session['transcript'] = final_transcript
+            
+            return jsonify({'transcript': final_transcript})
             
         except Exception as process_error:
             logger.error(f"Error in process_uploaded_audio: {str(process_error)}")

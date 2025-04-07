@@ -30,31 +30,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Check browser support for Speech Recognition
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     
-    // Helper function to create warning modal if it doesn't exist
-    function createWarningModal() {
-        const modalDiv = document.createElement("div");
-        modalDiv.innerHTML = `
-        <div class="modal fade" id="warningModal" tabindex="-1" aria-labelledby="warningModalLabel" aria-hidden="true">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header bg-warning">
-                        <h5 class="modal-title" id="warningModalLabel">Large File Warning</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div id="warning-message"></div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="button" id="warning-continue" class="btn btn-primary">Continue</button>
-                    </div>
-                </div>
-            </div>
-        </div>`;
-        document.body.appendChild(modalDiv.firstElementChild);
-        return document.getElementById("warningModal");
-    }
-    
     // Show error modal
     function showError(message) {
         const errorModal = new bootstrap.Modal(document.getElementById('errorModal'));
@@ -433,38 +408,51 @@ document.addEventListener('DOMContentLoaded', function() {
         // Wrap lists in ul or ol tags
         html = html
             .replace(/(<li>.*?<\/li>)\n<li>/gs, '$1<li>')
-            .replace(/(<li>.*?<\/li>)\n<li>/gs, '$1<li>')
-            .replace(/<li>.*?<\/li>/gs, '<ul>$&</ul>');
+            .replace(/<li>.*?<\/li>/gs, function(match) {
+                return '<ul>' + match + '</ul>';
+            });
+        
+        // Handle code blocks
+        html = html
+            .replace(/```(.*?)```/gs, '<pre><code>$1</code></pre>')
+            .replace(/`(.*?)`/g, '<code>$1</code>');
         
         // Handle blockquotes
         html = html.replace(/^> (.*?)$/gm, '<blockquote>$1</blockquote>');
         
-        // Handle paragraphs (lines with content that aren't headers or list items)
-        html = html.replace(/^(?!<h[1-6]|<li|<blockquote)(.+)$/gm, '<p>$1</p>');
+        // Handle horizontal rules
+        html = html.replace(/^---$/gm, '<hr>');
         
-        // Remove empty paragraphs
-        html = html.replace(/<p><\/p>/g, '');
+        // Handle paragraphs (double newlines)
+        html = html.replace(/\n\n([^<].*?)\n\n/gs, '</p><p>$1</p><p>');
+        
+        // Convert line breaks to <br>
+        html = html.replace(/\n([^<])/g, '<br>$1');
+        
+        // Wrap in paragraph if not already
+        if (!html.startsWith('<')) {
+            html = '<p>' + html + '</p>';
+        }
         
         return html;
     }
     
-    // Download PDF
+    // Download PDF of structured notes
     function downloadPDF() {
-        if (!finalTranscript || !structuredNotesElement || !structuredNotesElement.innerHTML) {
-            showError('No notes available to download. Please generate notes first.');
+        if (!structuredNotesElement || structuredNotesElement.textContent === 'Generated notes will appear here...') {
+            showError('No structured notes to download. Please generate notes first.');
             return;
         }
         
-        // Disable button during download
-        downloadPDFBtn.disabled = true;
-        downloadPDFBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Generating PDF...';
+        // Show loading state
+        if (downloadPDFBtn) {
+            downloadPDFBtn.disabled = true;
+            downloadPDFBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Generating PDF...';
+        }
         
+        // Fetch the PDF using AJAX
         fetch('/download-pdf', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ notes: structuredNotesElement.innerHTML })
+            method: 'POST'
         })
         .then(response => {
             if (!response.ok) {
@@ -473,29 +461,40 @@ document.addEventListener('DOMContentLoaded', function() {
             return response.blob();
         })
         .then(blob => {
-            // Create a download link and trigger it
+            // Create a download link for the blob
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.style.display = 'none';
             a.href = url;
             a.download = 'structured_notes.pdf';
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
+            a.remove();
         })
         .catch(error => {
             console.error('Error downloading PDF:', error);
             showError('Failed to download PDF. Please try again.');
         })
         .finally(() => {
-            // Reset download button
-            downloadPDFBtn.disabled = false;
-            downloadPDFBtn.innerHTML = '<i class="fas fa-file-pdf me-1"></i> Download PDF';
+            // Reset button state
+            if (downloadPDFBtn) {
+                downloadPDFBtn.disabled = false;
+                downloadPDFBtn.innerHTML = '<i class="fas fa-file-pdf me-1"></i> Download PDF';
+            }
         });
     }
     
-    // Handle file upload
-    if (transcribeAudioFileBtn) {
+    // Add event listeners
+    if (startRecordingBtn) startRecordingBtn.addEventListener('click', startRecording);
+    if (stopRecordingBtn) stopRecordingBtn.addEventListener('click', stopRecording);
+    if (clearTranscriptBtn) clearTranscriptBtn.addEventListener('click', clearTranscript);
+    if (generateNotesBtn) generateNotesBtn.addEventListener('click', generateNotes);
+    if (downloadPDFBtn) downloadPDFBtn.addEventListener('click', downloadPDF);
+    if (transcribeYoutubeBtn) transcribeYoutubeBtn.addEventListener('click', getYoutubeTranscript);
+    if (useManualTranscriptBtn) useManualTranscriptBtn.addEventListener('click', useManualTranscript);
+    
+    // File upload handler
+    if (transcribeAudioFileBtn && audioFileInput) {
         transcribeAudioFileBtn.addEventListener('click', function() {
             // Check if a file is selected
             if (!audioFileInput.files.length) {
@@ -534,6 +533,81 @@ document.addEventListener('DOMContentLoaded', function() {
             if (isVideoFile && file.size > 25 * 1024 * 1024) {
                 console.log("Large video file detected, showing warning");
                 // Show warning but allow to continue
+                function createWarningModal() {
+                    const modalDiv = document.createElement("div");
+                    modalDiv.innerHTML = `
+                    <div class="modal fade" id="warningModal" tabindex="-1" aria-labelledby="warningModalLabel" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header bg-warning">
+                                    <h5 class="modal-title" id="warningModalLabel">Large File Warning</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div id="warning-message"></div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="button" id="warning-continue" class="btn btn-primary">Continue</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+                    document.body.appendChild(modalDiv.firstElementChild);
+                    return document.getElementById("warningModal");
+                }
+
+                const warningModal = new bootstrap.Modal(document.getElementById("warningModal") || createWarningModal());
+                function createWarningModal() {
+                    const modalDiv = document.createElement('div');
+                    modalDiv.innerHTML = `
+                    <div class="modal fade" id="warningModal" tabindex="-1" aria-labelledby="warningModalLabel" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header bg-warning">
+                                    <h5 class="modal-title" id="warningModalLabel">Large File Warning</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div id="warning-message"></div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="button" id="warning-continue" class="btn btn-primary">Continue</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+                    document.body.appendChild(modalDiv.firstElementChild);
+                    return document.getElementById('warningModal');
+                }
+                
+                // Function to create warning modal if it doesn't exist in the DOM
+                function createWarningModal() {
+                    const modalDiv = document.createElement('div');
+                    modalDiv.innerHTML = `
+                    <div class="modal fade" id="warningModal" tabindex="-1" aria-labelledby="warningModalLabel" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header bg-warning">
+                                    <h5 class="modal-title" id="warningModalLabel">Large File Warning</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div id="warning-message"></div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="button" id="warning-continue" class="btn btn-primary">Continue</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+                    document.body.appendChild(modalDiv.firstElementChild);
+                    return document.getElementById('warningModal');
+                }
+                
+                const warningModal = new bootstrap.Modal(document.getElementById('warningModal') || createWarningModal());
                 const warningModal = new bootstrap.Modal(document.getElementById('warningModal') || createWarningModal());
                 document.getElementById('warning-message').innerHTML = 
                     `<p>The video file you selected is large (${(file.size / (1024 * 1024)).toFixed(1)}MB).</p>
@@ -556,110 +630,133 @@ document.addEventListener('DOMContentLoaded', function() {
             // Function to process the file
             function processFile() {
                 // Show loading state
-                transcribeAudioFileBtn.disabled = true;
-                transcribeAudioFileBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Processing...';
-                
-                // Create FormData and append the file
-                const formData = new FormData();
-                formData.append('file', file);
-                
-                // Show upload progress bar
-                if (uploadProgress) {
-                    uploadProgress.classList.remove('d-none');
-                    uploadProgress.querySelector('.progress-bar').style.width = '0%';
-                    uploadProgress.querySelector('.progress-bar').setAttribute('aria-valuenow', '0');
+            transcribeAudioFileBtn.disabled = true;
+            transcribeAudioFileBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Processing...';
+            
+            // Show progress if element exists
+            if (uploadProgress) {
+                uploadProgress.classList.remove('d-none');
+                const progressBar = uploadProgress.querySelector('.progress-bar');
+                if (progressBar) {
+                    progressBar.style.width = '0%';
+                }
+            }
+            
+            // Create form data
+            const formData = new FormData();
+            formData.append('audio_file', file);
+            
+            // Debug: Log form data (can't see the actual file content but we can see if it's attached)
+            console.log("FormData created with file:", file.name);
+            
+            // Send to server
+            const xhr = new XMLHttpRequest();
+            
+            // Track upload progress
+            xhr.upload.addEventListener('progress', function(e) {
+                if (e.lengthComputable && uploadProgress) {
+                    const percentComplete = Math.round((e.loaded / e.total) * 100);
+                    console.log(`Upload progress: ${percentComplete}%`);
+                    const progressBar = uploadProgress.querySelector('.progress-bar');
+                    if (progressBar) {
+                        progressBar.style.width = percentComplete + '%';
+                        progressBar.textContent = percentComplete + '%';
+                    }
+                }
+            });
+            
+            xhr.addEventListener('load', function() {
+                console.log("XHR load event, status:", xhr.status);
+                if (xhr.status === 200) {
+                    // Parse the response
+                    const response = JSON.parse(xhr.responseText);
+                    console.log("Response:", response);
+                    
+                    // Set the transcript
+                    if (response.transcript) {
+                        console.log("Setting transcript:", response.transcript);
+                        // No need to store in client-side session, the server already has it
+                        finalTranscript = response.transcript;
+                        if (transcriptElement) {
+                            transcriptElement.textContent = finalTranscript;
+                            
+                            // Make sure the tab with the transcript is active
+                            const transcriptTab = document.querySelector('button[data-bs-target="#transcript-tab"]');
+                            if (transcriptTab) {
+                                const tab = new bootstrap.Tab(transcriptTab);
+                                tab.show();
+                            }
+                            
+                            // Scroll to the transcript
+                            document.getElementById('transcript-container').scrollIntoView({ behavior: 'smooth' });
+                        }
+                        
+                        // Store in session
+                        saveTranscriptToServer(finalTranscript);
+                        
+                        // Enable generate notes button
+                        if (generateNotesBtn) {
+                            generateNotesBtn.disabled = false;
+                        }
+                        
+                        // Reset form
+                        audioFileInput.value = '';
+                    }
+                } else {
+                    // Handle error
+                    console.error("Error response:", xhr.status, xhr.responseText);
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        if (xhr.status === 503) {
+                            // Special handling for service unavailable
+                            const errorModal = new bootstrap.Modal(document.getElementById('errorModal'));
+                            const errorElement = document.getElementById('error-message');
+                            errorElement.innerHTML = `
+                                <div class="alert alert-warning">
+                                    <h5><i class="fas fa-exclamation-triangle me-2"></i>Service Limitation</h5>
+                                    <p>${response.error || 'Online speech recognition is currently unavailable.'}</p>
+                                    <hr>
+                                    <p class="mb-0">Suggestions:</p>
+                                    <ul>
+                                        <li>Try the YouTube transcription tab instead</li>
+                                        <li>Use the manual text input if you have a transcript</li>
+                                    </ul>
+                                </div>
+                            `;
+                            errorModal.show();
+                        } else {
+                            showError(`Error: ${response.error || 'Failed to transcribe audio file'}`);
+                        }
+                    } catch (e) {
+                        showError('Error: Failed to transcribe audio file. Server returned an invalid response.');
+                    }
                 }
                 
-                // Send the file to the server
-                const xhr = new XMLHttpRequest();
+                // Reset UI state
+                if (uploadProgress) {
+                    uploadProgress.classList.add('d-none');
+                }
+                transcribeAudioFileBtn.disabled = false;
+                transcribeAudioFileBtn.innerHTML = '<i class="fas fa-upload me-1"></i> Upload & Transcribe';
+            });
+            
+            xhr.addEventListener('error', function(e) {
+                console.error("XHR error event:", e);
+                showError('Error: Network error while uploading file. Please try again.');
                 
-                xhr.open('POST', '/transcribe-audio-file', true);
-                
-                // Track upload progress
-                xhr.upload.onprogress = function(e) {
-                    if (e.lengthComputable) {
-                        const percent = Math.round((e.loaded / e.total) * 100);
-                        if (uploadProgress) {
-                            uploadProgress.querySelector('.progress-bar').style.width = percent + '%';
-                            uploadProgress.querySelector('.progress-bar').setAttribute('aria-valuenow', percent);
-                            uploadProgress.querySelector('.progress-bar').textContent = percent + '%';
-                        }
-                    }
-                };
-                
-                xhr.onload = function() {
-                    // Hide progress bar
-                    if (uploadProgress) {
-                        uploadProgress.classList.add('d-none');
-                    }
-                    
-                    // Reset button
-                    transcribeAudioFileBtn.disabled = false;
-                    transcribeAudioFileBtn.innerHTML = '<i class="fas fa-upload me-1"></i> Transcribe File';
-                    
-                    if (xhr.status === 200) {
-                        try {
-                            const response = JSON.parse(xhr.responseText);
-                            if (response.transcript) {
-                                finalTranscript = response.transcript;
-                                
-                                // Update transcript display
-                                if (transcriptElement) {
-                                    transcriptElement.textContent = finalTranscript;
-                                }
-                                
-                                // Enable generate notes button
-                                if (generateNotesBtn) {
-                                    generateNotesBtn.disabled = false;
-                                }
-                                
-                                // Reset file input
-                                audioFileInput.value = '';
-                            } else if (response.error) {
-                                showError(response.error);
-                            }
-                        } catch (e) {
-                            console.error('Error parsing response:', e);
-                            showError('Error processing the file. Please try again or use a different file.');
-                        }
-                    } else {
-                        console.error('Upload failed with status:', xhr.status);
-                        showError('Upload failed. Please try again or use a different file.');
-                    }
-                };
-                
-                xhr.onerror = function() {
-                    console.error('XHR error');
-                    
-                    // Hide progress bar
-                    if (uploadProgress) {
-                        uploadProgress.classList.add('d-none');
-                    }
-                    
-                    // Reset button
-                    transcribeAudioFileBtn.disabled = false;
-                    transcribeAudioFileBtn.innerHTML = '<i class="fas fa-upload me-1"></i> Transcribe File';
-                    
-                    showError('Network error occurred. Please check your internet connection and try again.');
-                };
-                
-                // Send the request
-                xhr.send(formData);
-            }
+                // Reset UI state
+                if (uploadProgress) {
+                    uploadProgress.classList.add('d-none');
+                }
+                transcribeAudioFileBtn.disabled = false;
+                transcribeAudioFileBtn.innerHTML = '<i class="fas fa-upload me-1"></i> Upload & Transcribe';
+            });
+            
+            // Open and send the request
+            console.log("Opening XHR request to /transcribe-audio-file");
+            xhr.open('POST', '/transcribe-audio-file', true);
+            xhr.send(formData);
+            console.log("XHR request sent with form data");
         });
     }
-    
-    // Add event listeners
-    if (startRecordingBtn) startRecordingBtn.addEventListener('click', startRecording);
-    if (stopRecordingBtn) stopRecordingBtn.addEventListener('click', stopRecording);
-    if (clearTranscriptBtn) clearTranscriptBtn.addEventListener('click', clearTranscript);
-    if (generateNotesBtn) generateNotesBtn.addEventListener('click', generateNotes);
-    if (downloadPDFBtn) downloadPDFBtn.addEventListener('click', downloadPDF);
-    if (transcribeYoutubeBtn) transcribeYoutubeBtn.addEventListener('click', getYoutubeTranscript);
-    if (useManualTranscriptBtn) useManualTranscriptBtn.addEventListener('click', useManualTranscript);
-    
-    // Initialize UI state
-    if (stopRecordingBtn) stopRecordingBtn.disabled = true;
-    if (generateNotesBtn) generateNotesBtn.disabled = true;
-    if (downloadPDFBtn) downloadPDFBtn.disabled = true;
 });
