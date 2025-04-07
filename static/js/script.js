@@ -190,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // YouTube transcript function
-            }
+            if (statusMessage) {
     // YouTube transcript function
     function getYoutubeTranscript() {
         const youtubeUrl = youtubeUrlInput.value.trim();
@@ -261,7 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Add success notification
                 const successAlert = document.createElement('div');
-                successAlert.classList.add('alert', 'alert-success', 'mb-3', 'animate__animated', 'animate__fadeIn');
+                successAlert.classList.add('alert', 'alert-success', 'mb-3');
                 successAlert.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Transcript successfully extracted!';
                 
                 // Insert before the transcript
@@ -269,8 +269,56 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Remove after 3 seconds
                 setTimeout(() => {
-                    successAlert.classList.add('animate__fadeOut');
-                    setTimeout(() => successAlert.remove(), 500);
+                    successAlert.remove();
+                }, 3000);
+            }
+        })
+        .catch(error => {
+            clearTimeout(longVideoTimeout);
+            transcribeYoutubeBtn.disabled = false;
+            console.error('Error getting YouTube transcript:', error);
+            showError(`Error getting YouTube transcript: ${error.message}`);
+            transcriptElement.textContent = 'Error loading transcript. Please try again.';
+        });
+                statusMessage.innerHTML = 'Still working... <br>Downloading and processing video audio. <br>For videos longer than 10 minutes, this may take a minute or two.';
+            }
+        }, 5000);
+        
+        // Call API to get YouTube transcript
+        fetch('/transcribe-youtube', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ youtube_url: youtubeUrl }),
+        })
+        .then(response => {
+            clearTimeout(longVideoTimeout);
+            return response.json();
+        })
+        .then(data => {
+            transcribeYoutubeBtn.disabled = false;
+            
+            if (data.error) {
+                showError(data.error);
+                transcriptElement.textContent = 'Error loading transcript. Please try again.';
+            } else {
+                finalTranscript = data.transcript;
+                transcriptElement.textContent = finalTranscript;
+                generateNotesBtn.disabled = false;
+                
+                // Add success notification
+                const successAlert = document.createElement('div');
+                successAlert.classList.add("alert", "alert-success", "mb-3");
+                successAlert.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Transcript successfully extracted!';
+                
+                // Insert before the transcript
+                transcriptElement.parentNode.insertBefore(successAlert, transcriptElement);
+                
+                // Remove after 3 seconds
+                setTimeout(() => {
+
+                    ;
                 }, 3000);
             }
         })
@@ -308,7 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Add success notification
                 const successAlert = document.createElement('div');
-                successAlert.classList.add('alert', 'alert-success', 'mb-3', 'animate__animated', 'animate__fadeIn');
+                successAlert.classList.add("alert", "alert-success", "mb-3");
                 successAlert.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Transcript successfully extracted!';
                 
                 // Insert before the transcript
@@ -316,8 +364,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Remove after 3 seconds
                 setTimeout(() => {
-                    successAlert.classList.add('animate__fadeOut');
-                    setTimeout(() => successAlert.remove(), 500);
+
+                    ;
                 }, 3000);
             }
         })
