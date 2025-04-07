@@ -24,114 +24,133 @@
     <div class="container mt-4">
         <div class="row">
             <div class="col-lg-12">
-                <div class="card mb-4">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5><i class="fas fa-microphone me-2"></i>Speech Input</h5>
+                <!-- Main Card -->
+                <div class="card mb-4 border-primary">
+                    <div class="card-header bg-primary-subtle d-flex justify-content-between align-items-center">
+                        <h5><i class="fas fa-keyboard me-2"></i>Transcription Input</h5>
                         <div id="recording-status">
                             <span id="status-text">Ready</span>
                             <span id="recording-indicator" class="ms-2">⚪</span>
                         </div>
                     </div>
                     <div class="card-body">
-                        <div class="d-flex justify-content-center mb-3">
-                            <button id="startRecording" class="btn btn-primary me-2">
-                                <i class="fas fa-microphone me-1"></i> Start Recording
-                            </button>
-                            <button id="stopRecording" class="btn btn-danger me-2" disabled>
-                                <i class="fas fa-stop-circle me-1"></i> Stop Recording
-                            </button>
-                            <button id="clearTranscript" class="btn btn-secondary">
-                                <i class="fas fa-eraser me-1"></i> Clear
-                            </button>
-                        </div>
-                        
-                        <!-- YouTube URL Input -->
-                        <div class="input-group mb-3">
-                            <span class="input-group-text" id="youtube-addon">
-                                <i class="fab fa-youtube"></i>
-                            </span>
-                            <input type="text" class="form-control" id="youtube-url" 
-                                   placeholder="Enter YouTube URL to download and transcribe" 
-                                   aria-label="YouTube URL" aria-describedby="youtube-addon">
-<button class="btn btn-outline-danger" type="button" id="transcribe-youtube">
-                                <i class="fas fa-download me-1"></i> Download & Transcribe
-                            </button>
-                        </div>
-                        <!-- Audio File Upload (new feature) -->
-                        <div class="card mb-3">
-                            <div class="card-header bg-secondary-subtle text-body">
-                                <i class="fas fa-file-audio me-2"></i>Upload Audio File
-                            </div>
-                            <div class="card-body">
-                                <p class="card-text text-muted mb-3">
-                                    Upload an audio file (MP3, WAV, etc.) to transcribe and generate notes.
-                                </p>
-                                <form id="audio-upload-form" enctype="multipart/form-data">
-                                    <div class="mb-3">
-                                        <label for="audio-file-input" class="form-label">Select Audio File</label>
-                                        <input class="form-control" type="file" id="audio-file-input" 
-                                               accept=".mp3,.wav,.m4a,.ogg,.flac">
-                                        <div class="form-text">
-                                            Supported formats: MP3, WAV, M4A, OGG, FLAC
-                                        </div>
-                                    </div>
-                                    <button type="button" id="upload-audio-btn" class="btn btn-primary">
-                                        <i class="fas fa-upload me-1"></i> Upload & Transcribe
-                                    </button>
-                                </form>
-                                <div id="audio-upload-progress" class="mt-3 d-none">
-                                    <div class="alert alert-info">
-                                        <div class="d-flex align-items-center">
-                                            <div class="spinner-border text-primary me-3" role="status" style="width: 1.5rem; height: 1.5rem;">
-                                                <span class="visually-hidden">Loading...</span>
-                                            </div>
-                                            <div>
-                                                <strong>Processing audio file...</strong>
-                                                <div class="small text-muted">This may take a moment depending on file size</div>
-                                            </div>
-                                        </div>
-                                        <div class="progress mt-2" style="height: 8px;">
-                                            <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
-                                        </div>
-                                    </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Manual Transcript Input -->
-                        <div class="mb-3">
-                            <div class="form-floating">
-                                <textarea class="form-control" id="manual-transcript" 
-                                          placeholder="Paste transcript here" style="height: 100px"></textarea>
-                                <label for="manual-transcript">Or paste transcript manually</label>
-                            </div>
-                            <div class="d-flex justify-content-end mt-2">
-                                <button class="btn btn-outline-primary btn-sm" id="use-manual-transcript">
-                                    <i class="fas fa-check me-1"></i> Use This Transcript
+                        <!-- Content Source Options in Tabs -->
+                        <ul class="nav nav-tabs" id="inputTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="manual-tab" data-bs-toggle="tab" data-bs-target="#manual-content" type="button" role="tab" aria-controls="manual-content" aria-selected="true">
+                                    <i class="fas fa-keyboard me-2"></i>Manual Input
                                 </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="youtube-tab" data-bs-toggle="tab" data-bs-target="#youtube-content" type="button" role="tab" aria-controls="youtube-content" aria-selected="false">
+                                    <i class="fab fa-youtube me-2"></i>YouTube
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="recording-tab" data-bs-toggle="tab" data-bs-target="#recording-content" type="button" role="tab" aria-controls="recording-content" aria-selected="false">
+                                    <i class="fas fa-microphone me-2"></i>Record Speech
+                                </button>
+                            </li>
+                        </ul>
+                        
+                        <div class="tab-content p-3 border border-top-0 rounded-bottom mb-4" id="inputTabsContent">
+                            <!-- Manual Text Input Tab -->
+                            <div class="tab-pane fade show active" id="manual-content" role="tabpanel" aria-labelledby="manual-tab">
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <div class="card border-success">
+                                            <div class="card-header bg-success-subtle">
+                                                <i class="fas fa-keyboard me-2"></i><strong>Paste Text Transcription</strong>
+                                            </div>
+                                            <div class="card-body">
+                                                <p class="card-text mb-3">
+                                                    <small>Have a transcript from elsewhere? Simply paste it here to generate structured notes.</small>
+                                                </p>
+                                                <div class="mb-3">
+                                                    <textarea class="form-control" id="manual-transcript" rows="6" 
+                                                              placeholder="Paste your transcript here..."></textarea>
+                                                </div>
+                                                <button id="use-manual-transcript" class="btn btn-success w-100">
+                                                    <i class="fas fa-check me-1"></i> Use This Transcript
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                        
-                        <div class="alert alert-info mb-3" role="alert">
-                            <i class="fas fa-info-circle me-2"></i>
-                            Start speaking, download transcripts from YouTube, or paste text directly.
-                        </div>
-                        
-                        <div class="card">
-                            <div class="card-body">
-                                <h6 class="mb-3">Transcript:</h6>
-                                <div id="transcript-container" class="p-3 bg-dark rounded">
-                                    <p id="transcript" class="mb-0">Your speech will appear here...</p>
+                            
+                            <!-- YouTube Transcription Tab -->
+                            <div class="tab-pane fade" id="youtube-content" role="tabpanel" aria-labelledby="youtube-tab">
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <div class="card border-danger">
+                                            <div class="card-header bg-danger-subtle">
+                                                <i class="fab fa-youtube me-2"></i><strong>YouTube Transcription</strong>
+                                            </div>
+                                            <div class="card-body">
+                                                <p class="card-text mb-3">
+                                                    <small>Enter a YouTube URL to extract and process its transcript. Works with videos up to 2 hours long.</small>
+                                                </p>
+                                                <div class="input-group mb-3">
+                                                    <span class="input-group-text" id="youtube-addon">
+                                                        <i class="fab fa-youtube"></i>
+                                                    </span>
+                                                    <input type="text" class="form-control" id="youtube-url" 
+                                                        placeholder="YouTube video URL" 
+                                                        aria-label="YouTube URL">
+                                                </div>
+                                                <button class="btn btn-danger w-100" type="button" id="transcribe-youtube">
+                                                    <i class="fas fa-download me-1"></i> Get YouTube Transcript
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Recording Option Tab -->
+                            <div class="tab-pane fade" id="recording-content" role="tabpanel" aria-labelledby="recording-tab">
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <div class="card border-primary">
+                                            <div class="card-header bg-primary-subtle">
+                                                <i class="fas fa-microphone me-2"></i><strong>Record Live Speech</strong>
+                                            </div>
+                                            <div class="card-body">
+                                                <p class="card-text">
+                                                    <small>Use your microphone to record and transcribe speech in real-time.</small>
+                                                </p>
+                                                <div class="d-flex justify-content-center my-4">
+                                                    <button id="startRecording" class="btn btn-primary me-2">
+                                                        <i class="fas fa-microphone me-1"></i> Start Recording
+                                                    </button>
+                                                    <button id="stopRecording" class="btn btn-danger me-2" disabled>
+                                                        <i class="fas fa-stop-circle me-1"></i> Stop Recording
+                                                    </button>
+                                                    <button id="clearTranscript" class="btn btn-secondary">
+                                                        <i class="fas fa-eraser me-1"></i> Clear
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-                
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <h5><i class="fas fa-file-alt me-2"></i>Structured Notes</h5>
-                    </div>
-                    <div class="card-body">
+                        
+                        <!-- Transcript Display -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-dark">
+                                <h6 class="mb-0"><i class="fas fa-file-alt me-2"></i>Transcript:</h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="transcript-container" class="p-3 bg-dark rounded">
+                                    <p id="transcript" class="mb-0">Your transcript will appear here...</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Action Buttons -->
                         <div class="d-flex justify-content-center mb-3">
                             <button id="generateNotes" class="btn btn-success me-2" disabled>
                                 <i class="fas fa-magic me-1"></i> Generate Notes
@@ -140,17 +159,27 @@
                                 <i class="fas fa-file-pdf me-1"></i> Download PDF
                             </button>
                         </div>
-                        
+                    </div>
+                </div>
+                
+                <!-- Structured Notes Card -->
+                <div class="card mb-4 border-success">
+                    <div class="card-header bg-success-subtle">
+                        <h5><i class="fas fa-file-alt me-2"></i>Structured Notes</h5>
+                    </div>
+                    <div class="card-body">
                         <div id="notes-loading" class="text-center py-4 d-none">
-                            <div class="spinner-border text-primary" role="status">
+                            <div class="spinner-border text-success" role="status">
                                 <span class="visually-hidden">Loading...</span>
                             </div>
-                            <p class="mt-2">Generating structured notes...</p>
+                            <p class="mt-2">Generating structured notes with Groq AI...</p>
+                            <div class="progress mt-3" style="height: 8px;">
+                                <div class="progress-bar bg-success progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+                            </div>
                         </div>
                         
                         <div class="card">
                             <div class="card-body">
-                                <h6 class="mb-3">Structured Notes:</h6>
                                 <div id="notes-container" class="p-3 bg-dark rounded">
                                     <pre id="structured-notes" class="mb-0">Generated notes will appear here...</pre>
                                 </div>
@@ -182,10 +211,6 @@
 
     <!-- Bootstrap JS Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Marked.js for Markdown rendering -->
-    <script src="https://cdn.jsdelivr.net/npm/marked@4.0.0/marked.min.js"></script>
-    <!-- DOMPurify for sanitizing HTML -->
-    <script src="https://cdn.jsdelivr.net/npm/dompurify@2.3.8/dist/purify.min.js"></script>
     <!-- Marked.js for Markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked@4.0.0/marked.min.js"></script>
     <!-- DOMPurify for sanitizing HTML -->
