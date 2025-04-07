@@ -3,6 +3,8 @@ import logging
 import os
 import tempfile
 import groq
+from pydub import AudioSegment
+import uuid
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -68,6 +70,82 @@ def save_audio_from_blob(audio_blob):
     except Exception as e:
         logger.error(f"Error saving audio blob: {str(e)}")
         raise e
+
+def process_uploaded_audio(uploaded_file):
+    """
+    Process and transcribe an uploaded audio file (MP3, WAV, etc.)
+    
+    Args:
+        uploaded_file: The uploaded file object from Flask request.files
+        
+    Returns:
+        str: Transcribed text from the audio file
+    """
+    try:
+        logger.info(f"Processing uploaded audio file: {uploaded_file.filename}")
+        
+        # Create a unique filename to avoid conflicts
+        file_id = str(uuid.uuid4())
+        original_filename = uploaded_file.filename
+        file_extension = os.path.splitext(original_filename)[1].lower()
+        
+        # Create temp directory if it doesn't exist
+        temp_dir = os.path.join(os.getcwd(), 'uploads')
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Save the uploaded file
+        temp_input_path = os.path.join(temp_dir, f"{file_id}{file_extension}")
+        uploaded_file.save(temp_input_path)
+        
+        # Convert to WAV if not already WAV (SpeechRecognition requires WAV)
+        wav_path = os.path.join(temp_dir, f"{file_id}.wav")
+        
+        if file_extension.lower() != '.wav':
+            logger.info(f"Converting {file_extension} file to WAV format")
+            try:
+                # Load the audio file with pydub
+                if file_extension.lower() == '.mp3':
+                    audio = AudioSegment.from_mp3(temp_input_path)
+                elif file_extension.lower() == '.m4a':
+                    audio = AudioSegment.from_file(temp_input_path, format="m4a")
+                elif file_extension.lower() == '.ogg':
+                    audio = AudioSegment.from_ogg(temp_input_path)
+                else:
+                    # Try generic loading for other formats
+                    audio = AudioSegment.from_file(temp_input_path)
+                
+                # Convert to WAV format at 16kHz (good for speech recognition)
+                audio = audio.set_frame_rate(16000)
+                audio.export(wav_path, format="wav")
+                
+                logger.info(f"Audio conversion successful: {wav_path}")
+            except Exception as e:
+                logger.error(f"Error converting audio file: {str(e)}")
+                # Clean up the original temp file
+                if os.path.exists(temp_input_path):
+                    os.remove(temp_input_path)
+                return f"Error: Could not convert audio file. {str(e)}"
+        else:
+            # If already WAV, just use the original file
+            wav_path = temp_input_path
+        
+        # Transcribe the WAV file
+        transcript = transcribe_audio(wav_path)
+        
+        # Clean up temporary files
+        try:
+            if os.path.exists(temp_input_path):
+                os.remove(temp_input_path)
+            if wav_path != temp_input_path and os.path.exists(wav_path):
+                os.remove(wav_path)
+        except Exception as e:
+            logger.warning(f"Error removing temporary files: {str(e)}")
+        
+        return transcript
+        
+    except Exception as e:
+        logger.error(f"Error processing uploaded audio: {str(e)}")
+        return f"Error processing audio file: {str(e)}"
 
 def transcribe_youtube_audio(audio_file_path):
     """

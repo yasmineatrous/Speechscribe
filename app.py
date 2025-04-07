@@ -2,7 +2,7 @@ import os
 import logging
 from flask import Flask, render_template, request, jsonify, send_file, session
 from call_llm import generate_structured_notes, extract_youtube_transcript, download_and_transcribe_youtube
-from audio import transcribe_audio
+from audio import transcribe_audio, process_uploaded_audio
 from youtube import get_youtube_transcript
 import io
 from reportlab.pdfgen import canvas
@@ -287,6 +287,46 @@ def save_transcript():
     except Exception as e:
         logger.error(f"Error saving transcript: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/transcribe-audio-file', methods=['POST'])
+def transcribe_audio_file():
+    """Process and transcribe an uploaded audio file (MP3, WAV, etc.)"""
+    try:
+        # Check if file was uploaded
+        if 'audio_file' not in request.files:
+            return jsonify({'error': 'No audio file provided'}), 400
+        
+        audio_file = request.files['audio_file']
+        
+        # Check if file was selected
+        if audio_file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        # Check file extension
+        allowed_extensions = {'.mp3', '.wav', '.m4a', '.ogg', '.flac'}
+        file_ext = os.path.splitext(audio_file.filename)[1].lower()
+        
+        if file_ext not in allowed_extensions:
+            return jsonify({
+                'error': f'Unsupported file format. Allowed formats: {", ".join(allowed_extensions)}'
+            }), 400
+        
+        # Process and transcribe the audio file
+        transcript = process_uploaded_audio(audio_file)
+        
+        # Check if there was an error
+        if transcript.startswith('Error'):
+            logger.error(f"Error transcribing audio file: {transcript}")
+            return jsonify({'error': transcript}), 400
+        
+        # Store transcript in session for later use
+        session['transcript'] = transcript
+        
+        return jsonify({'transcript': transcript})
+    
+    except Exception as e:
+        logger.error(f"Error processing audio file: {str(e)}")
+        return jsonify({'error': f"Failed to process audio file: {str(e)}"}), 500
 
 @app.route('/transcribe-youtube', methods=['POST'])
 def transcribe_youtube():

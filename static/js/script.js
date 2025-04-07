@@ -16,6 +16,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const transcribeYoutubeBtn = document.getElementById('transcribe-youtube');
     const manualTranscriptInput = document.getElementById('manual-transcript');
     const useManualTranscriptBtn = document.getElementById('use-manual-transcript');
+    // Audio file upload elements
+    const audioFileInput = document.getElementById('audio-file-input');
+    const uploadAudioBtn = document.getElementById('upload-audio-btn');
+    const audioUploadProgress = document.getElementById('audio-upload-progress');
     
     // Global variables
     let recognition = null;
@@ -375,6 +379,91 @@ document.addEventListener('DOMContentLoaded', () => {
             showError('Please enter a transcript before proceeding.');
             return;
         }
+
+    // Function to upload and process audio file
+    function uploadAndProcessAudio() {
+        const fileInput = audioFileInput;
+        
+        if (!fileInput.files || fileInput.files.length === 0) {
+            showError('Please select an audio file to upload.');
+            return;
+        }
+        
+        const file = fileInput.files[0];
+        
+        // Check file type
+        const allowedTypes = ['.mp3', '.wav', '.m4a', '.ogg', '.flac'];
+        const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+        
+        if (!allowedTypes.includes(fileExtension)) {
+            showError(`Unsupported file format. Allowed formats: ${allowedTypes.join(', ')}`);
+            return;
+        }
+        
+        // Check file size (limit to 100MB)
+        const maxSize = 100 * 1024 * 1024; // 100MB in bytes
+        if (file.size > maxSize) {
+            showError('File size exceeds the limit of 100MB. Please select a smaller file.');
+            return;
+        }
+        
+        // Show progress and disable button
+        audioUploadProgress.classList.remove('d-none');
+        uploadAudioBtn.disabled = true;
+        
+        // Clear previous transcript
+        finalTranscript = '';
+        transcriptElement.textContent = '';
+        structuredNotesElement.innerHTML = '';
+        
+        // Create FormData and append file
+        const formData = new FormData();
+        formData.append('audio_file', file);
+        
+        // Send to server
+        fetch('/transcribe-audio-file', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Hide progress and enable button
+            audioUploadProgress.classList.add('d-none');
+            uploadAudioBtn.disabled = false;
+            
+            if (data.error) {
+                showError(data.error);
+                transcriptElement.textContent = 'Error processing audio file. Please try again.';
+            } else {
+                finalTranscript = data.transcript;
+                
+                // Show success notification
+                const successAlert = document.createElement('div');
+                successAlert.className = "alert alert-success mb-3";
+                successAlert.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Audio file successfully transcribed!';
+                
+                // Insert success notification
+                transcriptElement.innerHTML = '';
+                transcriptElement.parentNode.insertBefore(successAlert, transcriptElement);
+                
+                // Set transcript text
+                transcriptElement.textContent = finalTranscript;
+                generateNotesBtn.disabled = false;
+                
+                // Remove notification after 3 seconds
+                setTimeout(() => {
+                    successAlert.remove();
+                }, 3000);
+            }
+        })
+        .catch(error => {
+            audioUploadProgress.classList.add('d-none');
+            uploadAudioBtn.disabled = false;
+            console.error('Error processing audio file:', error);
+            showError(`Error processing audio file: ${error.message}`);
+            transcriptElement.textContent = 'Error processing audio file. Please try again.';
+        });
+    }
         
         finalTranscript = transcript;
         transcriptElement.textContent = finalTranscript;

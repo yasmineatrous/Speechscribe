@@ -10,6 +10,7 @@ dependencies = [
     "groq>=0.22.0",
     "gunicorn>=23.0.0",
     "psycopg2-binary>=2.9.10",
+    "pydub>=0.25.1",
     "reportlab>=4.3.1",
     "requests>=2.32.3",
     "speechrecognition>=3.14.2",
