@@ -2,6 +2,7 @@ import speech_recognition as sr
 import logging
 import os
 import tempfile
+import groq
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -67,3 +68,28 @@ def save_audio_from_blob(audio_blob):
     except Exception as e:
         logger.error(f"Error saving audio blob: {str(e)}")
         raise e
+
+def transcribe_youtube_audio(audio_file_path):
+    """
+    Transcribe YouTube audio file using Groq API
+    
+    Args:
+        audio_file_path (str): Path to the downloaded audio file
+        
+    Returns:
+        str: Transcribed text
+    """
+    try:
+        logger.info(f"Transcribing YouTube audio from: {audio_file_path}")
+        
+        # First check if the file exists
+        if not os.path.exists(audio_file_path):
+            logger.error(f"Audio file not found at: {audio_file_path}")
+            return "Audio file not found. Download may have failed."
+        
+        # Use the SpeechRecognition library with the local audio file
+        return transcribe_audio(audio_file_path)
+        
+    except Exception as e:
+        logger.error(f"Error transcribing YouTube audio: {str(e)}")
+        return f"Error processing YouTube audio: {str(e)}"

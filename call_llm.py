@@ -3,6 +3,8 @@ import groq
 import logging
 import trafilatura
 import requests
+from download import download_video_audio, delete_download
+from audio import transcribe_youtube_audio
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -158,3 +160,39 @@ def extract_youtube_transcript(youtube_url):
     except Exception as e:
         logger.error(f"Error extracting YouTube transcript with Groq: {str(e)}")
         return f"Error extracting YouTube transcript: {str(e)}"
+
+def download_and_transcribe_youtube(youtube_url):
+    """
+    Download audio from YouTube video and transcribe it
+    
+    Args:
+        youtube_url (str): The YouTube video URL
+        
+    Returns:
+        str: The extracted transcript
+    """
+    try:
+        logger.info(f"Starting YouTube download and transcription process for: {youtube_url}")
+        
+        # Download the audio from YouTube
+        audio_file_path = download_video_audio(youtube_url)
+        
+        # Check if download was successful
+        if not audio_file_path or audio_file_path is None:
+            logger.error("Failed to download audio from YouTube")
+            return "Error: Failed to download audio from YouTube. The video might be unavailable or too large."
+        
+        logger.info(f"Successfully downloaded audio to: {audio_file_path}")
+        
+        # Transcribe the downloaded audio
+        transcript = transcribe_youtube_audio(audio_file_path)
+        
+        # Clean up - delete the downloaded file
+        delete_download(audio_file_path)
+        logger.info("Deleted downloaded audio file after transcription")
+        
+        return transcript
+        
+    except Exception as e:
+        logger.error(f"Error in download and transcribe process: {str(e)}")
+        return f"Error processing YouTube video: {str(e)}"

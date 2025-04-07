@@ -1,7 +1,7 @@
 import os
 import logging
 from flask import Flask, render_template, request, jsonify, send_file, session
-from call_llm import generate_structured_notes, extract_youtube_transcript
+from call_llm import generate_structured_notes, extract_youtube_transcript, download_and_transcribe_youtube
 from audio import transcribe_audio
 from youtube import get_youtube_transcript
 import io
@@ -281,7 +281,7 @@ def save_transcript():
 
 @app.route('/transcribe-youtube', methods=['POST'])
 def transcribe_youtube():
-    """Get and process transcript from YouTube video using Groq API"""
+    """Get and process transcript from YouTube video"""
     try:
         data = request.json
         youtube_url = data.get('youtube_url', '')
@@ -289,22 +289,31 @@ def transcribe_youtube():
         if not youtube_url:
             return jsonify({'error': 'No YouTube URL provided'}), 400
         
-        # Try the original YouTube API method first
-        try:
-            transcript = get_youtube_transcript(youtube_url)
-            
-            # If it fails, use Groq API as fallback
-            if transcript.startswith('Error'):
-                logger.info(f"YouTube API failed, using Groq API fallback for: {youtube_url}")
-                transcript = extract_youtube_transcript(youtube_url)
-            
-        except Exception as youtube_error:
-            # If the original method fails completely, use Groq as fallback
-            logger.info(f"YouTube API error: {str(youtube_error)}, using Groq API fallback")
-            transcript = extract_youtube_transcript(youtube_url)
+        # Try direct download and transcription first
+        logger.info(f"Attempting to download and transcribe YouTube video: {youtube_url}")
+        transcript = download_and_transcribe_youtube(youtube_url)
         
-        # Check if we still have an error
+        # If download and transcribe fails, try the original methods as fallbacks
         if transcript.startswith('Error'):
+            logger.info(f"Download method failed, trying YouTube API for: {youtube_url}")
+            
+            try:
+                # Try the YouTube API method
+                transcript = get_youtube_transcript(youtube_url)
+                
+                # If YouTube API fails, use Groq API as final fallback
+                if transcript.startswith('Error'):
+                    logger.info(f"YouTube API failed, using Groq API fallback for: {youtube_url}")
+                    transcript = extract_youtube_transcript(youtube_url)
+                
+            except Exception as youtube_error:
+                # If the YouTube API method fails completely, use Groq as fallback
+                logger.info(f"YouTube API error: {str(youtube_error)}, using Groq API fallback")
+                transcript = extract_youtube_transcript(youtube_url)
+        
+        # Check if we still have an error after all attempts
+        if transcript.startswith('Error'):
+            logger.error(f"All transcription methods failed for: {youtube_url}")
             return jsonify({'error': transcript}), 400
         
         # Store transcript in session for later use
