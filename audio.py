@@ -71,7 +71,7 @@ def save_audio_from_blob(audio_blob):
 
 def transcribe_youtube_audio(audio_file_path):
     """
-    Transcribe YouTube audio file using Groq API
+    Transcribe YouTube audio file
     
     Args:
         audio_file_path (str): Path to the downloaded audio file
@@ -85,10 +85,45 @@ def transcribe_youtube_audio(audio_file_path):
         # First check if the file exists
         if not os.path.exists(audio_file_path):
             logger.error(f"Audio file not found at: {audio_file_path}")
-            return "Audio file not found. Download may have failed."
+            return "Error: Audio file not found. Download may have failed."
         
-        # Use the SpeechRecognition library with the local audio file
-        return transcribe_audio(audio_file_path)
+        # Get file size
+        file_size = os.path.getsize(audio_file_path)
+        logger.info(f"Audio file size: {file_size} bytes")
+        
+        if file_size == 0:
+            logger.error("Audio file is empty (0 bytes)")
+            return "Error: Downloaded audio file is empty."
+        
+        # Initialize the speech recognizer
+        try:
+            recognizer = sr.Recognizer()
+            
+            # Load the audio file
+            logger.info("Loading audio file into speech recognizer")
+            with sr.AudioFile(audio_file_path) as source:
+                # Get audio data
+                audio_data = recognizer.record(source)
+                
+                # Use Google's speech recognition service
+                logger.info("Starting Google speech recognition")
+                transcript = recognizer.recognize_google(audio_data)
+                
+                # Check if we got a valid transcript
+                if not transcript or transcript.strip() == "":
+                    logger.warning("Google speech recognition returned empty result")
+                    return "Error: No speech could be recognized in the audio."
+                
+                logger.info(f"Transcription successful, got {len(transcript)} characters")
+                return transcript
+        
+        except sr.UnknownValueError:
+            logger.error("Google Speech Recognition could not understand audio")
+            return "Error: Could not understand audio. The speech might be unclear or in an unsupported language."
+            
+        except sr.RequestError as e:
+            logger.error(f"Google Speech Recognition service error: {str(e)}")
+            return f"Error: Could not request results from speech recognition service. {str(e)}"
         
     except Exception as e:
         logger.error(f"Error transcribing YouTube audio: {str(e)}")

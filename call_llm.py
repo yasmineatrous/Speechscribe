@@ -174,18 +174,42 @@ def download_and_transcribe_youtube(youtube_url):
     try:
         logger.info(f"Starting YouTube download and transcription process for: {youtube_url}")
         
+        # Validate the URL
+        if not youtube_url.startswith("https://www.youtube.com/") and not youtube_url.startswith("https://youtu.be/"):
+            logger.error(f"Invalid YouTube URL: {youtube_url}")
+            return "Error: Please provide a valid YouTube URL starting with 'https://www.youtube.com/' or 'https://youtu.be/'"
+        
         # Download the audio from YouTube
-        audio_file_path = download_video_audio(youtube_url)
+        logger.info("Calling download_video_audio function...")
+        audio_file_path = download_video_audio(youtube_url, lambda msg: logger.debug(f"YT-DLP: {msg}"))
         
         # Check if download was successful
         if not audio_file_path or audio_file_path is None:
             logger.error("Failed to download audio from YouTube")
             return "Error: Failed to download audio from YouTube. The video might be unavailable or too large."
         
+        # Verify the file exists
+        if not os.path.exists(audio_file_path):
+            logger.error(f"Downloaded file not found at: {audio_file_path}")
+            return f"Error: Downloaded file not found at: {audio_file_path}"
+        
         logger.info(f"Successfully downloaded audio to: {audio_file_path}")
         
         # Transcribe the downloaded audio
+        logger.info("Starting transcription...")
         transcript = transcribe_youtube_audio(audio_file_path)
+        
+        # Check if transcription worked
+        if transcript.startswith("Error"):
+            logger.error(f"Transcription failed: {transcript}")
+            delete_download(audio_file_path)
+            return transcript
+        
+        # Check if we got an empty transcript
+        if not transcript or transcript.strip() == "":
+            logger.error("Transcription returned empty result")
+            delete_download(audio_file_path)
+            return "Error: Transcription failed. No text was extracted from the video."
         
         # Clean up - delete the downloaded file
         delete_download(audio_file_path)
