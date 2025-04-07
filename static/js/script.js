@@ -455,3 +455,95 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+    // File upload functionality
+    const audioFileInput = document.getElementById('audio-file');
+    const transcribeAudioFileBtn = document.getElementById('transcribe-audio-file');
+    const uploadProgress = document.getElementById('upload-progress');
+    const uploadProgressBar = uploadProgress.querySelector('.progress-bar');
+    
+    // Audio file upload handler
+    transcribeAudioFileBtn.addEventListener('click', function() {
+        // Check if a file is selected
+        if (!audioFileInput.files.length) {
+            showError('Please select an audio file first.');
+            return;
+        }
+        
+        const file = audioFileInput.files[0];
+        
+        // Validate file type
+        const allowedTypes = ['.mp3', '.wav', '.m4a', '.ogg', '.flac'];
+        const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+        if (!allowedTypes.includes(fileExtension)) {
+            showError(`Invalid file type. Allowed types: ${allowedTypes.join(', ')}`);
+            return;
+        }
+        
+        // Show loading state
+        transcribeAudioFileBtn.disabled = true;
+        transcribeAudioFileBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Processing...';
+        uploadProgress.classList.remove('d-none');
+        uploadProgressBar.style.width = '0%';
+        
+        // Create form data
+        const formData = new FormData();
+        formData.append('audio_file', file);
+        
+        // Send to server
+        const xhr = new XMLHttpRequest();
+        
+        // Track upload progress
+        xhr.upload.addEventListener('progress', function(e) {
+            if (e.lengthComputable) {
+                const percentComplete = Math.round((e.loaded / e.total) * 100);
+                uploadProgressBar.style.width = percentComplete + '%';
+                uploadProgressBar.textContent = percentComplete + '%';
+            }
+        });
+        
+        xhr.addEventListener('load', function() {
+            if (xhr.status === 200) {
+                // Parse the response
+                const response = JSON.parse(xhr.responseText);
+                
+                // Set the transcript
+                if (response.transcript) {
+                    finalTranscript = response.transcript;
+                    updateTranscriptDisplay();
+                    
+                    // Enable generate notes button
+                    generateNotesBtn.disabled = false;
+                    
+                    // Reset form
+                    audioFileInput.value = '';
+                }
+            } else {
+                // Handle error
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    showError(`Error: ${response.error || 'Failed to transcribe audio file'}`);
+                } catch (e) {
+                    showError('Error: Failed to transcribe audio file. Server returned an invalid response.');
+                }
+            }
+            
+            // Reset UI state
+            uploadProgress.classList.add('d-none');
+            transcribeAudioFileBtn.disabled = false;
+            transcribeAudioFileBtn.innerHTML = '<i class="fas fa-upload me-1"></i> Upload & Transcribe';
+        });
+        
+        xhr.addEventListener('error', function() {
+            showError('Error: Network error while uploading file. Please try again.');
+            
+            // Reset UI state
+            uploadProgress.classList.add('d-none');
+            transcribeAudioFileBtn.disabled = false;
+            transcribeAudioFileBtn.innerHTML = '<i class="fas fa-upload me-1"></i> Upload & Transcribe';
+        });
+        
+        // Open and send the request
+        xhr.open('POST', '/transcribe-audio-file', true);
+        xhr.send(formData);
+    });
