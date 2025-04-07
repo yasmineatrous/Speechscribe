@@ -561,7 +561,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Set the transcript
                     if (response.transcript) {
                         console.log("Setting transcript:", response.transcript);
-                        session["transcript"] = response.transcript;
+                        // No need to store in client-side session, the server already has it
                         finalTranscript = response.transcript;
                         if (transcriptElement) {
                             transcriptElement.textContent = finalTranscript;
