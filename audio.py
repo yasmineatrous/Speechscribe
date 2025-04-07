@@ -6,7 +6,6 @@ import groq
 from pydub import AudioSegment
 import uuid
 import time
-from flask import session
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -122,124 +121,15 @@ def save_audio_from_blob(audio_blob):
         logger.error(f"Error saving audio blob: {str(e)}")
         raise e
 
-import subprocess
-
-def extract_audio_from_video(video_path, output_path, max_duration=None):
-    """
-    Extract audio from a video file using FFmpeg for faster processing
-    
-    Args:
-        video_path (str): Path to the video file
-        output_path (str): Path where the extracted audio will be saved
-        max_duration (int, optional): Maximum duration in seconds to extract
-                                     (for large files, extract only first N minutes)
-        
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    try:
-        logger.info(f"Extracting audio from video file using FFmpeg: {video_path}")
-        
-        # Get video duration if we need to check if it's a large file
-        video_duration = None
-        if max_duration:
-            try:
-                duration_cmd = [
-                    'ffprobe', 
-                    '-v', 'error', 
-                    '-show_entries', 'format=duration', 
-                    '-of', 'default=noprint_wrappers=1:nokey=1', 
-                    video_path
-                ]
-                duration_result = subprocess.run(
-                    duration_cmd, 
-                    stderr=subprocess.PIPE, 
-                    stdout=subprocess.PIPE, 
-                    text=True,
-                    timeout=30
-                )
-                if duration_result.returncode == 0:
-                    video_duration = float(duration_result.stdout.strip())
-                    logger.info(f"Video duration: {video_duration} seconds")
-            except Exception as e:
-                logger.warning(f"Could not determine video duration: {str(e)}")
-        
-        # Build the FFmpeg command
-        cmd = ['ffmpeg', '-i', video_path]  # Base command with input
-        
-        # Add time limit if video is very long
-        if max_duration and video_duration and video_duration > max_duration:
-            logger.info(f"Limiting audio extraction to first {max_duration} seconds of video")
-            cmd.extend(['-t', str(max_duration)])  # Limit duration
-        
-        # Add output options
-        cmd.extend([
-            '-vn',             # Skip video
-            '-acodec', 'libmp3lame',  # Use MP3 codec
-            '-ar', '16000',    # Set sample rate to 16kHz
-            '-ac', '1',        # Mono channel
-            '-q:a', '5',       # Medium quality (faster)
-            '-y',              # Overwrite output file
-            output_path
-        ])
-        
-        logger.info(f"Running FFmpeg command: {' '.join(cmd)}")
-        
-        # Run the command with a timeout
-        result = subprocess.run(
-            cmd, 
-            stderr=subprocess.PIPE, 
-            stdout=subprocess.PIPE,
-            timeout=300  # 5 minute timeout
-        )
-        
-        # Check if the command was successful
-        if result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-            logger.info(f"FFmpeg audio extraction successful: {output_path}")
-            return True
-        else:
-            logger.error(f"FFmpeg audio extraction failed with code {result.returncode}")
-            logger.error(f"FFmpeg output: {result.stderr.decode('utf-8', errors='replace')}")
-            
-            # Fall back to pydub if FFmpeg fails
-            logger.info("Falling back to pydub for audio extraction")
-            try:
-                # Load the video file with pydub
-                video = AudioSegment.from_file(video_path)
-                
-                # Export as MP3
-                video.export(output_path, format="mp3")
-                
-                # Verify the output file exists and has content
-                if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                    logger.info(f"Pydub fallback audio extraction successful: {output_path}")
-                    return True
-                else:
-                    logger.error(f"Pydub fallback audio extraction failed: Output file is empty or does not exist")
-                    return False
-            except Exception as pydub_error:
-                logger.error(f"Pydub fallback extraction error: {str(pydub_error)}")
-                return False
-            
-    except subprocess.TimeoutExpired:
-        logger.error("FFmpeg process timed out after 5 minutes")
-        return False
-    except Exception as e:
-        logger.error(f"Error extracting audio from video: {str(e)}")
-        return False
-
 def process_uploaded_audio(uploaded_file):
     """
-    Process and transcribe an uploaded audio or video file (MP3, WAV, MP4, etc.)
-    
-    This function automatically detects if the file is a video format and extracts the audio,
-    then transcribes the audio using Groq's Whisper API.
+    Process and transcribe an uploaded audio file (MP3, WAV, etc.)
     
     Args:
         uploaded_file: The uploaded file object from Flask request.files
         
     Returns:
-        str: Transcribed text from the audio portion of the file
+        str: Transcribed text from the audio file
     """
     # Create unique filenames first
     file_id = str(uuid.uuid4())
@@ -247,7 +137,7 @@ def process_uploaded_audio(uploaded_file):
     wav_path = None
     
     try:
-        logger.info(f"Processing uploaded file: {uploaded_file.filename}")
+        logger.info(f"Processing uploaded audio file: {uploaded_file.filename}")
         
         # Get file metadata
         original_filename = uploaded_file.filename
@@ -259,14 +149,7 @@ def process_uploaded_audio(uploaded_file):
         
         # Define file paths
         temp_input_path = os.path.join(temp_dir, f"{file_id}{file_extension}")
-        
-        # Define valid video extensions
-        video_extensions = {'.mp4', '.mov', '.avi', '.mkv', '.webm'}
-        is_video = file_extension in video_extensions
-        
-        # For videos, we'll extract to mp3 for faster processing
-        audio_path = os.path.join(temp_dir, f"{file_id}.mp3" if is_video else f"{file_id}.wav")
-        wav_path = audio_path  # For compatibility with the rest of the code
+        wav_path = os.path.join(temp_dir, f"{file_id}.wav")
         
         # Save the uploaded file directly to disk to avoid memory issues
         logger.info(f"Saving uploaded file to: {temp_input_path}")
@@ -276,32 +159,11 @@ def process_uploaded_audio(uploaded_file):
         
         if file_size == 0:
             logger.error("Uploaded file is empty (0 bytes)")
-            return "Error: The uploaded file is empty. Please try again with a valid file."
+            return "Error: The uploaded file is empty. Please try again with a valid audio file."
         
-        # Process based on file type
-        if is_video:
-            logger.info(f"Processing video file: {file_extension}")
-            
-            # For large files, only process first 10 minutes
-            file_size_mb = file_size / (1024 * 1024)
-            max_duration = None
-            
-            # If file is over 25MB, limit to 10 minutes
-            if file_size_mb > 25:
-                max_duration = 600  # 10 minutes in seconds
-                logger.info(f"Large video file detected ({file_size_mb:.2f} MB), limiting to first {max_duration/60:.1f} minutes")
-            
-            if not extract_audio_from_video(temp_input_path, wav_path, max_duration=max_duration):
-                return "Error: Could not extract audio from video file."
-                
-            # If we limited the duration, add a note to that effect
-            if max_duration:
-                session_note = "Note: Due to the large size of the video, only the first 10 minutes were transcribed. For longer videos, please use the YouTube transcription option instead."
-                # Store this note to potentially add it to the transcript
-                session['processing_note'] = session_note
-        elif file_extension.lower() != '.wav':
-            # Convert audio to WAV if needed
-            logger.info(f"Converting {file_extension} audio file to WAV format")
+        # Convert to WAV if needed
+        if file_extension.lower() != '.wav':
+            logger.info(f"Converting {file_extension} file to WAV format")
             try:
                 # Load the audio file with pydub
                 logger.debug(f"Loading audio file: {temp_input_path}")
@@ -385,7 +247,7 @@ def process_uploaded_audio(uploaded_file):
         except Exception as cleanup_error:
             logger.warning(f"Error during cleanup: {str(cleanup_error)}")
             
-        return f"Error processing media file: {str(e)}"
+        return f"Error processing audio file: {str(e)}"
 
 def transcribe_youtube_audio(audio_file_path):
     """
