@@ -15,11 +15,40 @@ document.addEventListener('DOMContentLoaded', function() {
     const useManualTranscriptBtn = document.getElementById('use-manual-transcript');
     const manualTranscriptInput = document.getElementById('manual-transcript');
     
+    // Tab navigation elements
+    const uploadTabButton = document.getElementById('upload-tab');
+    const youtubeTabButton = document.getElementById('youtube-tab');
+    
     // File upload functionality
     const audioFileInput = document.getElementById('audio-file');
     const transcribeAudioFileBtn = document.getElementById('transcribe-audio-file');
     const uploadProgress = document.getElementById('upload-progress');
     const audioUploadForm = document.getElementById('audio-upload-form');
+    
+    // Add tab switching logic - refresh page when switching to upload tab from youtube tab
+    if (uploadTabButton) {
+        uploadTabButton.addEventListener('click', function() {
+            // Check if we're coming from YouTube tab
+            if (youtubeTabButton && youtubeTabButton.classList.contains('active')) {
+                // Refresh the page to ensure a clean state
+                window.location.reload();
+            }
+        });
+    }
+    const transcribeAudioFileBtn = document.getElementById('transcribe-audio-file');
+    const uploadProgress = document.getElementById('upload-progress');
+    const audioUploadForm = document.getElementById('audio-upload-form');
+    
+    // Add tab switching logic - refresh page when switching to upload tab from youtube tab
+    if (uploadTabButton) {
+        uploadTabButton.addEventListener('click', function() {
+            // Check if we're coming from YouTube tab
+            if (youtubeTabButton && youtubeTabButton.classList.contains('active')) {
+                // Refresh the page to ensure a clean state
+                window.location.reload();
+            }
+        });
+    }
     
     // Global variables
     let recognition = null;
