@@ -35,6 +35,20 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    const transcribeAudioFileBtn = document.getElementById('transcribe-audio-file');
+    const uploadProgress = document.getElementById('upload-progress');
+    const audioUploadForm = document.getElementById('audio-upload-form');
+    
+    // Add tab switching logic - refresh page when switching to upload tab from youtube tab
+    if (uploadTabButton) {
+        uploadTabButton.addEventListener('click', function() {
+            // Check if we're coming from YouTube tab
+            if (youtubeTabButton && youtubeTabButton.classList.contains('active')) {
+                // Refresh the page to ensure a clean state
+                window.location.reload();
+            }
+        });
+    }
     
     // Global variables
     let recognition = null;

@@ -35,6 +35,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    }
     
     // Global variables
     let recognition = null;
