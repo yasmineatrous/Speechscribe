@@ -5,6 +5,10 @@ import trafilatura
 import requests
 from download import download_video_audio, delete_download
 from audio import transcribe_youtube_audio
+from dotenv import load_dotenv
+
+
+load_dotenv()  
 
 # Configure logging
 logger = logging.getLogger(__name__)

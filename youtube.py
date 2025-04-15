@@ -1,6 +1,10 @@
 import re
 import logging
 from youtube_transcript_api import YouTubeTranscriptApi
+from dotenv import load_dotenv
+
+
+load_dotenv()  
 
 # Configure logging
 logger = logging.getLogger(__name__)

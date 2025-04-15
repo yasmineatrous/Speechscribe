@@ -6,6 +6,11 @@ import groq
 from pydub import AudioSegment
 import uuid
 import time
+from dotenv import load_dotenv
+
+
+load_dotenv()  
+
 
 # Configure logging
 logger = logging.getLogger(__name__)
